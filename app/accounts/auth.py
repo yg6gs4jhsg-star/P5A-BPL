@@ -6,7 +6,7 @@ from requests import RequestException
 
 from app.accounts import bp
 from app.accounts.roles import compute_base_role, is_admin
-from app.models import Account, db
+from app.models import Account, Invitation, Member, db, utcnow
 
 # --- Constantes ---
 SCOPES = "openid profile email"
@@ -50,8 +50,21 @@ def account_from_claims(claims):
     account = Account.query.filter_by(oid=claims["oid"]).first() or Account(oid=claims["oid"])
     account.email, account.name, account.base_role = email.strip().lower(), claims.get("name", email), base_role
     db.session.add(account)
+    join_invited_projects(account)
     db.session.commit()
     return account
+
+
+def join_invited_projects(account):
+    """Les invitations valables deviennent des membres (même transaction que le compte).
+
+    Une invitation « collabo » attend si la personne est encadrante : un Collabo est un étudiant.
+    """
+    for invitation in Invitation.query.filter(Invitation.email == account.email, Invitation.expires_at > utcnow()):
+        if invitation.role == "collabo" and account.base_role != "etudiant":
+            continue
+        db.session.add(Member(project_id=invitation.project_id, account=account, role=invitation.role))
+        db.session.delete(invitation)
 
 
 def message(text, status):

@@ -6,8 +6,9 @@ from pathlib import Path
 from flask import current_app
 from sqlalchemy import func
 
+from app.accounts.roles import STAFF_DOMAIN, STUDENT_DOMAIN, domain_of, normalize_email
 from app.authorization.rules import can
-from app.models import HistoryEvent, Member, Project, db, utcnow
+from app.models import Account, HistoryEvent, Invitation, Member, Project, db, utcnow
 
 # --- Constantes ---
 TITLE_MAX = 200
@@ -23,6 +24,10 @@ TRANSITIONS = {
     "accept_reedition": ("answer_reedition", {"reedition_demandee"}, "brouillon"),
     "refuse_reedition": ("answer_reedition", {"reedition_demandee"}, "publie"),
 }
+
+
+INVITATION_ROLES = ("collabo", "client")
+EPF_DOMAINS = (STAFF_DOMAIN, STUDENT_DOMAIN)
 
 
 class ProjectError(Exception):
@@ -128,3 +133,61 @@ def restore_project(user, project):
         raise ProjectError("Ce projet n'est pas à la corbeille.")
     with transaction():
         project.deleted_at = None
+
+
+def invite(user, project, email, role):
+    """Compte existant : membre tout de suite. Sinon : invitation de 30 jours, acceptée à la première connexion."""
+    require(user, "manage_members", project)
+    if role not in INVITATION_ROLES:
+        raise ProjectError("Le rôle doit être Collabo ou Client.")
+    email = normalize_email(email)
+    domain = domain_of(email)
+    if domain not in EPF_DOMAINS:
+        raise ProjectError("Adresse invalide : seules les adresses @epfedu.fr et @epf.fr sont acceptées.")
+    account = Account.query.filter_by(email=email).first()
+    is_student = account.base_role == "etudiant" if account else domain == STUDENT_DOMAIN
+    if role == "collabo" and not is_student:
+        raise ProjectError("Un Collabo doit être un étudiant.")
+    if account and Member.query.filter_by(project_id=project.id, account_id=account.id).first():
+        raise ProjectError("Cette personne fait déjà partie de l'équipe.")
+    pending = Invitation.query.filter_by(project_id=project.id, email=email).first()
+    if pending and pending.expires_at > utcnow():
+        raise ProjectError("Cette adresse est déjà invitée.")
+    with transaction():
+        if pending:
+            db.session.delete(pending)  # invitation expirée : remplacée
+            db.session.flush()
+        if account:
+            db.session.add(Member(project=project, account=account, role=role))
+        else:
+            db.session.add(Invitation(project=project, email=email, role=role))
+
+
+def remove_member(user, project, account):
+    require(user, "manage_members", project)
+    member = Member.query.filter_by(project_id=project.id, account_id=account.id).first()
+    if member is None:
+        raise ProjectError("Cette personne ne fait pas partie de l'équipe.")
+    if member.role == "owner":
+        raise ProjectError("On ne retire pas l'Owner : transférez d'abord son rôle.")
+    with transaction():
+        db.session.delete(member)
+
+
+def cancel_invitation(user, project, invitation):
+    require(user, "manage_members", project)
+    if invitation.project_id != project.id:
+        raise ProjectError("Cette invitation ne concerne pas ce projet.")
+    with transaction():
+        db.session.delete(invitation)
+
+
+def transfer_ownership(user, project, target):
+    """Le Collabo choisi devient Owner ; l'ancien Owner devient Collabo."""
+    require(user, "transfer_ownership", project)
+    new_owner = Member.query.filter_by(project_id=project.id, account_id=target.id, role="collabo").first()
+    if new_owner is None:
+        raise ProjectError("Le nouvel Owner doit être un Collabo du projet.")
+    with transaction():
+        Member.query.filter_by(project_id=project.id, role="owner").one().role = "collabo"
+        new_owner.role = "owner"
