@@ -1,19 +1,19 @@
+import hashlib
 import re
 import unicodedata
 from contextlib import contextmanager
-from pathlib import Path
 
 from flask import current_app
 from sqlalchemy import func
 
 from app.accounts.roles import STAFF_DOMAIN, STUDENT_DOMAIN, domain_of, normalize_email
 from app.authorization.rules import can
-from app.models import Account, HistoryEvent, Invitation, Member, Project, db, utcnow
+from app.models import Account, File, HistoryEvent, Invitation, Member, Project, db, utcnow
+from app.projects import content
 
 # --- Constantes ---
 TITLE_MAX = 200
 DEFAULT_SLUG = "projet"
-CONTENT_SUBDIRS = ("draft", "published", "files")
 # Action -> (droit vérifié par can, statuts de départ, statut d'arrivée). Voir § 3 du cahier des charges.
 TRANSITIONS = {
     "submit": ("submit", {"brouillon"}, "en_relecture"),
@@ -83,8 +83,7 @@ def create_project(user, title, supervisor=None):
             HistoryEvent(project=project, author=user, new_status="brouillon"),
         ])
         db.session.flush()  # attribue l'UUID, nom du dossier
-        for subdir in CONTENT_SUBDIRS:
-            (Path(current_app.config["CONTENT_DIR"]) / "projects" / project.uuid / subdir).mkdir(parents=True)
+        content.create_folders(project)
     return project
 
 
@@ -106,6 +105,8 @@ def change_status(user, project, action, message=None):
             raise ProjectError("Le statut du projet a déjà changé : action impossible.")
         db.session.add(HistoryEvent(project=project, author=user, old_status=old_status,
                                     new_status=to_status, message=message or None))
+        if action == "publish":
+            content.copy_draft_to_published(project)
     db.session.refresh(project)
 
 
@@ -191,3 +192,37 @@ def transfer_ownership(user, project, target):
     with transaction():
         Member.query.filter_by(project_id=project.id, role="owner").one().role = "collabo"
         new_owner.role = "owner"
+
+
+def save_draft(user, project, texts, versions):
+    """Enregistre les sections du brouillon, sauf si quelqu'un les a modifiées depuis l'ouverture."""
+    require(user, "edit_draft", project)
+    for section in content.SECTIONS:
+        if content.fingerprint(content.read_section(project, "draft", section)) != versions.get(section):
+            raise ProjectError("Le projet a changé depuis votre ouverture : copiez votre texte, "
+                               "rechargez la page et recommencez.")
+    with transaction():
+        project.updated_at = utcnow()
+        for section in content.SECTIONS:
+            content.write_section(project, section, texts.get(section, ""))
+
+
+def add_file(user, project, original_name, data):
+    """Fichier vérifié sur son contenu, nettoyé de ses métadonnées, rangé sous un nom aléatoire."""
+    require(user, "edit_draft", project)
+    mime_type = content.detect_type(data)
+    if mime_type is None:
+        raise ProjectError("Type de fichier refusé : images PNG ou JPEG, PDF, vidéos MP4.")
+    if len(data) > content.max_size(mime_type):
+        raise ProjectError(f"Fichier trop lourd : {content.max_size(mime_type) // content.MB} Mo au maximum.")
+    used = db.session.query(func.coalesce(func.sum(File.size), 0)).filter_by(project_id=project.id).scalar()
+    if used + len(data) > current_app.config["MAX_PROJECT_MB"] * content.MB:
+        raise ProjectError(f"Ce projet a atteint sa limite de {current_app.config['MAX_PROJECT_MB']} Mo de fichiers.")
+    data = content.clean_file(data, mime_type)
+    stored = File(project=project, original_name=(original_name or "fichier")[:255], mime_type=mime_type,
+                  size=len(data), sha256=hashlib.sha256(data).hexdigest())
+    with transaction():
+        db.session.add(stored)
+        db.session.flush()  # attribue l'UUID, nom sur le disque
+        content.write_file(project, stored.uuid, data)
+    return stored

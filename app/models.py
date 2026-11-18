@@ -65,6 +65,7 @@ class Project(db.Model):
     supervisor = db.relationship("Account")
     members = db.relationship("Member", back_populates="project", cascade="all, delete-orphan")
     invitations = db.relationship("Invitation", back_populates="project", cascade="all, delete-orphan")
+    files = db.relationship("File", back_populates="project", cascade="all, delete-orphan", order_by="File.id")
     history = db.relationship(
         "HistoryEvent", back_populates="project", cascade="all, delete-orphan",
         order_by="(HistoryEvent.created_at, HistoryEvent.id)",
@@ -112,3 +113,16 @@ class AdminEmail(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(254), unique=True, nullable=False)
     added_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+
+class File(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    uuid = db.Column(db.String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4()))  # nom sur le disque
+    project_id = db.Column(db.ForeignKey("project.id", ondelete="CASCADE"), nullable=False)
+    original_name = db.Column(db.String(255), nullable=False)
+    mime_type = db.Column(db.String(100), nullable=False)
+    size = db.Column(db.Integer, nullable=False)
+    sha256 = db.Column(db.String(64), nullable=False)  # empreinte
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+    project = db.relationship("Project", back_populates="files")

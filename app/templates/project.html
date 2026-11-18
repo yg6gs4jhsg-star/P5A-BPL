@@ -8,6 +8,12 @@
 <p>Encadrant : {{ project.supervisor.name if project.supervisor else "pas encore attribué" }}</p>
 
 {% if error %}<p class="alerte">{{ error }}</p>{% endif %}
+{% if can_edit %}<p><a href="{{ url_for('projects.edit_draft', slug=project.slug) }}">Modifier le brouillon</a></p>{% endif %}
+
+{% for section, title in sections.items() if texts[section] %}
+<h2>{{ title }}</h2>
+{{ texts[section] }}
+{% endfor %}
 
 <h2>Équipe</h2>
 <ul>

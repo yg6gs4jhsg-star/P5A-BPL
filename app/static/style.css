@@ -26,3 +26,6 @@ input, select { font: inherit; max-width: 100%; }
 .confirmation { border-left: 4px solid var(--lilas); padding: 0.5rem 1rem; background: #f1ebfc; }
 main form { margin: 0.5rem 0; }
 li form { display: inline; margin-left: 0.5rem; }
+textarea { width: 100%; box-sizing: border-box; font: inherit; }
+.apercu { border: 1px dashed var(--lilas); padding: 0 1rem; margin: 0.5rem 0; }
+main img, main video { max-width: 100%; }

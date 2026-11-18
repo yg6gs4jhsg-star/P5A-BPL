@@ -1,13 +1,13 @@
-from flask import abort, flash, redirect, render_template, request, url_for
+from flask import abort, flash, redirect, render_template, request, send_file, url_for
 from flask_login import current_user, login_required
 from flask_wtf.csrf import CSRFError
 
 from app.accounts.auth import message
 from app.accounts.roles import is_admin
 from app.authorization.rules import can
-from app.models import STATUS_LABELS, Account, Invitation, Member, Project, db
+from app.models import STATUS_LABELS, Account, File, Invitation, Member, Project, db
 from app.projects import bp
-from app.projects import service
+from app.projects import content, service
 from app.projects.service import TRANSITIONS, ProjectError, create_project
 
 # --- Constantes ---
@@ -50,6 +50,11 @@ def not_found(error):
 @bp.app_errorhandler(403)
 def forbidden(error):
     return message("Action non autorisée : vous n'avez pas ce droit, ou le statut du projet a changé.", 403)
+
+
+@bp.app_errorhandler(413)
+def too_large(error):
+    return message("Fichier trop lourd.", 413)
 
 
 @bp.app_errorhandler(CSRFError)
@@ -111,8 +116,12 @@ def allowed_actions(project):
 
 
 def show_project(project, readable, error=None, status=200):
+    # L'équipe voit le brouillon ; le public voit la dernière version validée.
+    folder = "draft" if readable else "published"
+    texts = {section: content.render(content.read_section(project, folder, section)) for section in content.SECTIONS}
     return render_template(
-        "project.html", project=project, readable=readable, error=error,
+        "project.html", project=project, readable=readable, error=error, texts=texts,
+        sections=content.SECTIONS, can_edit=can(current_user, "edit_draft", project),
         allowed=allowed_actions(project),
         supervisors=Account.query.filter_by(base_role="encadrant").order_by(Account.name),
     ), status
@@ -166,3 +175,66 @@ def project_action(slug, action):
         return show_project(project, readable, str(refusal), 400)
     flash(confirmation)
     return redirect(url_for("projects.project_page", slug=project.slug))
+
+
+def editable_project(slug):
+    """Projet modifiable : 404 s'il n'est pas visible, 403 sans le droit ou hors brouillon."""
+    project, _ = visible_project(slug)
+    if not can(current_user, "edit_draft", project):
+        abort(403)
+    return project
+
+
+def show_editor(project, texts, versions, preview=False, error=None, status=200):
+    return render_template(
+        "editor.html", project=project, sections=content.SECTIONS, texts=texts, versions=versions,
+        previews={s: content.render(t) for s, t in texts.items()} if preview else None, error=error,
+    ), status
+
+
+@bp.route("/projets/<slug>/editer", methods=["GET", "POST"])
+@login_required
+def edit_draft(slug):
+    project = editable_project(slug)
+    if request.method == "GET":
+        texts = {s: content.read_section(project, "draft", s) for s in content.SECTIONS}
+        return show_editor(project, texts, {s: content.fingerprint(t) for s, t in texts.items()})
+    texts = {s: request.form.get(s, "").replace("\r\n", "\n") for s in content.SECTIONS}
+    versions = {s: request.form.get(f"version_{s}") for s in content.SECTIONS}
+    if request.form.get("preview"):
+        return show_editor(project, texts, versions, preview=True)
+    try:
+        service.save_draft(current_user, project, texts, versions)
+    except ProjectError as refusal:
+        return show_editor(project, texts, versions, error=str(refusal), status=409)
+    flash("Brouillon enregistré.")
+    return redirect(url_for("projects.edit_draft", slug=slug))
+
+
+@bp.route("/projets/<slug>/fichiers", methods=["POST"])
+@login_required
+def upload_file(slug):
+    project = editable_project(slug)
+    upload = request.files.get("file")
+    try:
+        if not upload or not upload.filename:
+            raise ProjectError("Choisissez un fichier.")
+        service.add_file(current_user, project, upload.filename, upload.read())
+    except ProjectError as refusal:
+        texts = {s: content.read_section(project, "draft", s) for s in content.SECTIONS}
+        return show_editor(project, texts, {s: content.fingerprint(t) for s, t in texts.items()},
+                           error=str(refusal), status=400)
+    flash("Fichier ajouté.")
+    return redirect(url_for("projects.edit_draft", slug=slug))
+
+
+@bp.route("/fichiers/<file_uuid>")
+def download_file(file_uuid):
+    """Mêmes droits que la page du projet ; le public ne voit que les fichiers de la version validée."""
+    stored = File.query.filter_by(uuid=file_uuid).first() or abort(404)
+    project, readable = visible_project(stored.project.slug)
+    if not readable and not any(content.FILES_URL + file_uuid in content.read_section(project, "published", s)
+                                for s in content.SECTIONS):
+        abort(404)
+    return send_file(content.file_path(project, file_uuid), mimetype=stored.mime_type,
+                     download_name=stored.original_name)

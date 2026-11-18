@@ -20,6 +20,8 @@ def create_app(overrides=None):
     app = Flask(__name__)
     app.config.update(load_config())
     app.config.update(overrides or {})
+    # Un envoi plus gros que la plus grande limite (vidéo) est refusé avant d'être lu.
+    app.config["MAX_CONTENT_LENGTH"] = (app.config["MAX_VIDEO_MB"] + 1) * 1024 * 1024
     if not app.config["DEBUG"] and app.config["SECRET_KEY"] == DEV_SECRET_KEY:
         raise RuntimeError("SECRET_KEY doit être changée hors développement.")
     db.init_app(app)

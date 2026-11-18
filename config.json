@@ -2,5 +2,6 @@
   "site_url": "http://localhost:8000",
   "debug": true,
   "max_file_mb": 10,
-  "max_video_mb": 100
+  "max_video_mb": 100,
+  "max_project_mb": 500
 }
