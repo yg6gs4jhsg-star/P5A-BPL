@@ -7,7 +7,14 @@ from sqlalchemy import Enum, MetaData, UniqueConstraint
 
 # --- Constantes ---
 BASE_ROLES = ("etudiant", "encadrant")
-STATUSES = ("brouillon", "en_relecture", "publie", "reedition_demandee", "retire")
+STATUS_LABELS = {
+    "brouillon": "Brouillon",
+    "en_relecture": "En relecture",
+    "publie": "Publié",
+    "reedition_demandee": "Réédition demandée",
+    "retire": "Retiré du site public",
+}
+STATUSES = tuple(STATUS_LABELS)
 MEMBER_ROLES = ("owner", "collabo", "client")
 INVITATION_ROLES = ("collabo", "client")
 INVITATION_DAYS = 30

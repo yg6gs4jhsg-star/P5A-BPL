@@ -1,7 +1,8 @@
 import pytest
 
 from app.authorization.rules import RULES, can
-from app.models import Account, AdminEmail, Member, Project, db, utcnow
+from app.models import AdminEmail, Member, Project, db, utcnow
+from tests.conftest import person
 
 # Matrice des droits (§ 2.2) : action -> (statut du projet testé, droits V C Co O E A).
 # V visiteur, C client, Co collabo, O owner, E encadrant du projet, A admin. None = sans projet.
@@ -28,14 +29,6 @@ MATRIX = {
     "admin_site":         (None,                 "000001"),
 }
 COLUMNS = ("visiteur", "client", "collabo", "owner", "encadrant", "admin")
-
-
-def person(name, base_role="etudiant", admin=False):
-    account = Account(oid=name, email=f"{name}@epf.fr", name=name, base_role=base_role)
-    db.session.add(account)
-    if admin:
-        db.session.add(AdminEmail(email=account.email))
-    return account
 
 
 @pytest.fixture
