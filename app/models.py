@@ -98,3 +98,9 @@ class HistoryEvent(db.Model):
 
     project = db.relationship("Project", back_populates="history")
     author = db.relationship("Account")
+
+
+class AdminEmail(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(254), unique=True, nullable=False)
+    added_at = db.Column(db.DateTime, nullable=False, default=utcnow)
