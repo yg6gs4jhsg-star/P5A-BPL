@@ -1,13 +1,3 @@
-import pytest
-
-from app import create_app
-
-
-@pytest.fixture
-def client():
-    return create_app().test_client()
-
-
 def test_home_responds(client):
     assert client.get("/").status_code == 200
 

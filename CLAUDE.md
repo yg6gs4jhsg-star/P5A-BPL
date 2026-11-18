@@ -35,7 +35,7 @@ Cahier des charges fonctionnel (V3.1), dossier d'architecture (2.1) et `matrice_
 - Anticiper les erreurs avant de dire « c'est fini » : lancer `pytest` (la commande exacte, pas `python -m pytest`), tester aussi les cas d'erreur, vérifier que `flask --app app run --port 8000` démarre.
 - À la fin de chaque étape, dire à Perrine en langage simple : les fichiers créés, les commandes à lancer (par exemple `pip install -r requirements.txt` si `requirements.txt` a changé), et ce qu'elle doit voir à l'écran.
 - **Aucune initiative** : ne rien ajouter qui ne soit pas écrit dans le cahier des charges ou dans la consigne de l'étape. Si un point n'est pas tranché par les documents, poser la question avant de coder et attendre la réponse.
-- Ne faire ni `git commit` ni `git push` : Perrine s'en occupe depuis VS Code. Ne supprimer aucun fichier.
+- À la fin de chaque étape (tests verts) : `git commit` puis `git push` sur la branche de travail, avec le nom de l'étape comme message. Ne supprimer aucun fichier.
 - Une étape à la fois. Ne pas commencer la suivante.
 
 ## Règles de code
