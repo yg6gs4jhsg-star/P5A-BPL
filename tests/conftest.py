@@ -11,7 +11,7 @@ TENANT = "tenant-test"
 def app(tmp_path):
     """Application de test : base SQLite en mémoire et dossier de contenu temporaire, vides à chaque test."""
     app = create_app({"TESTING": True, "SQLALCHEMY_DATABASE_URI": "sqlite://", "OIDC_TENANT_ID": TENANT,
-                      "CONTENT_DIR": str(tmp_path)})
+                      "CONTENT_DIR": str(tmp_path), "WTF_CSRF_ENABLED": False})
     with app.app_context():
         db.create_all()
         yield app
@@ -28,9 +28,16 @@ def client(app):
 def person(name, base_role="etudiant", admin=False):
     """Compte de test (adresse en @epf.fr, ou @epfedu.fr pour un étudiant)."""
     domain = "epfedu.fr" if base_role == "etudiant" else "epf.fr"
-    account = Account(oid=name, email=f"{name}@{domain}", name=name, base_role=base_role)
+    account = Account(oid=name, email=f"{name.lower()}@{domain}", name=name, base_role=base_role)
     db.session.add(account)
     if admin:
         db.session.add(AdminEmail(email=account.email))
     db.session.commit()
     return account
+
+
+def log_in(client, account):
+    """Ouvre la session de ce compte sans passer par le fournisseur OpenID."""
+    with client.session_transaction() as session:
+        session["_user_id"] = str(account.id)
+        session["_fresh"] = True

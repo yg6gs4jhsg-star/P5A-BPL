@@ -2,6 +2,7 @@ from importlib import import_module
 
 from flask import Flask
 from flask_migrate import Migrate
+from flask_wtf.csrf import CSRFProtect
 
 from app.accounts.auth import init_auth
 from app.config import DEV_SECRET_KEY, load_config
@@ -25,6 +26,7 @@ def create_app(overrides=None):
     # Mode « batch » : SQLite ne sait pas modifier une table existante autrement.
     Migrate(app, db, render_as_batch=True)
     init_auth(app)
+    CSRFProtect(app)  # jeton vérifié sur chaque formulaire qui envoie des données
     for name in MODULES:
         app.register_blueprint(import_module(f"app.{name}").bp)
     return app

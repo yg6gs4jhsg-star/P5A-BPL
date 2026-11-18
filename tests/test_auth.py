@@ -59,7 +59,7 @@ def test_callback_logs_in_and_shows_my_space(client, monkeypatch):
     monkeypatch.setattr(oauth.microsoft, "authorize_access_token",
                         lambda: {"userinfo": claims(email="prof@epf.fr", name="Prof")})
     assert client.get("/auth/callback").location == "/mon-espace"
-    assert "Prof : encadrant · admin" in client.get("/mon-espace").text
+    assert "Prof · Encadrant · admin" in client.get("/mon-espace").text
 
 
 def test_callback_refused_account_gets_message(client, monkeypatch):
@@ -84,7 +84,7 @@ def test_provider_unreachable_gives_503(client, monkeypatch, url, method):
 def test_logout_closes_session(client, monkeypatch):
     monkeypatch.setattr(oauth.microsoft, "authorize_access_token", lambda: {"userinfo": claims()})
     client.get("/auth/callback")
-    client.get("/logout")
+    client.post("/logout")
     assert client.get("/mon-espace").status_code == 302
 
 

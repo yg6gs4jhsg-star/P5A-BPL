@@ -21,6 +21,7 @@ SESSION_SETTINGS = {
     "PERMANENT_SESSION_LIFETIME": timedelta(hours=8),
     "SESSION_COOKIE_HTTPONLY": True,
     "SESSION_COOKIE_SAMESITE": "Lax",
+    "WTF_CSRF_TIME_LIMIT": None,  # jeton CSRF valable toute la session
 }
 
 

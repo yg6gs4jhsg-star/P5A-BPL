@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}{{ project.title }} · BluePrintLab{% endblock %}
+{% block content %}
+{% if project.deleted_at %}<p class="alerte">Ce projet est à la corbeille.</p>{% endif %}
+<h1>{{ project.title }}</h1>
+{% if readable %}<p>Statut : {{ project.status|label }}</p>{% endif %}
+<p>Encadrant : {{ project.supervisor.name if project.supervisor else "pas encore attribué" }}</p>
+
+<h2>Équipe</h2>
+<ul>
+  {% for member in project.members %}<li>{{ member.account.name }} · {{ member.role|label }}</li>{% endfor %}
+</ul>
+
+{% if show_invitations and project.invitations %}
+<h2>Invitations en attente</h2>
+<ul>
+  {% for invitation in project.invitations %}
+  <li>{{ invitation.email }} · {{ invitation.role|label }} · expire le {{ invitation.expires_at.strftime("%d/%m/%Y") }}</li>
+  {% endfor %}
+</ul>
+{% endif %}
+
+{% if readable %}
+<h2>Historique</h2>
+<table>
+  <tr><th>Date (UTC)</th><th>Auteur</th><th>Statut</th><th>Message</th></tr>
+  {% for event in project.history %}
+  <tr>
+    <td>{{ event.created_at.strftime("%d/%m/%Y %H:%M") }}</td>
+    <td>{{ event.author.name if event.author else "ancien membre" }}</td>
+    <td>{% if event.old_status %}{{ event.old_status|label }} → {% endif %}{{ event.new_status|label }}</td>
+    <td>{{ event.message or "" }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+{% endblock %}

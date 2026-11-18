@@ -3,7 +3,4 @@ from flask import Blueprint
 
 bp = Blueprint("projects", __name__)
 
-
-@bp.route("/")
-def home():
-    return "BluePrintLab : le site démarre."
+from app.projects import pages  # noqa: E402,F401  (enregistre les routes)

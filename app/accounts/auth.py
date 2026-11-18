@@ -1,11 +1,11 @@
 from authlib.integrations.flask_client import OAuth, OAuthError
-from flask import current_app, redirect, render_template_string, session, url_for
-from flask_login import LoginManager, current_user, login_required, login_user, logout_user
+from flask import current_app, redirect, render_template, session, url_for
+from flask_login import LoginManager, login_user, logout_user
 from joserfc.errors import JoseError
 from requests import RequestException
 
 from app.accounts import bp
-from app.accounts.roles import compute_base_role, is_admin
+from app.accounts.roles import compute_base_role
 from app.models import Account, Invitation, Member, db, utcnow
 
 # --- Constantes ---
@@ -14,11 +14,11 @@ SCOPES = "openid profile email"
 PROVIDER_ERRORS = (RequestException, OAuthError, JoseError)
 UNAVAILABLE = "Connexion impossible pour le moment, réessayez plus tard."
 REFUSED = "Votre compte n'a pas accès à l'espace de rédaction."
-PAGE = '<p>{{ text }}</p><p><a href="{{ url_for(\'projects.home\') }}">Retour à l\'accueil</a></p>'
 
 oauth = OAuth()
 login_manager = LoginManager()
 login_manager.login_view = "accounts.login"
+login_manager.login_message = None  # retour direct vers la connexion, sans message en anglais
 
 
 def init_auth(app):
@@ -68,7 +68,8 @@ def join_invited_projects(account):
 
 
 def message(text, status):
-    return render_template_string(PAGE, text=text), status
+    """Page avec un seul message et un lien vers l'accueil."""
+    return render_template("message.html", text=text), status
 
 
 @bp.route("/login")
@@ -90,21 +91,12 @@ def callback():
         return message(REFUSED, 403)
     login_user(account)
     session.permanent = True  # expire après PERMANENT_SESSION_LIFETIME
-    return redirect(url_for("accounts.my_space"))
+    return redirect(url_for("projects.my_space"))
 
 
-@bp.route("/logout")
+@bp.route("/logout", methods=["POST"])
 def logout():
     logout_user()
     session.clear()
     return redirect(url_for("projects.home"))
 
-
-@bp.route("/mon-espace")
-@login_required
-def my_space():
-    admin = " · admin" if is_admin(current_user.email) else ""
-    return render_template_string(
-        "<p>{{ name }} : {{ role }}{{ admin }}</p><p><a href=\"{{ url_for('accounts.logout') }}\">Se déconnecter</a></p>",
-        name=current_user.name, role=current_user.base_role, admin=admin,
-    )
