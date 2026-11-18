@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime, timedelta, timezone
 
+from flask_login import UserMixin
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import Enum, MetaData, UniqueConstraint
 
@@ -32,7 +33,7 @@ def choice(values, name):
     return Enum(*values, name=name, native_enum=False, create_constraint=True, validate_strings=True)
 
 
-class Account(db.Model):
+class Account(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     oid = db.Column(db.String(64), unique=True, nullable=False)  # identifiant Microsoft
     email = db.Column(db.String(254), unique=True, nullable=False)
