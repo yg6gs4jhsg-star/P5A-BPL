@@ -23,3 +23,6 @@ a { color: var(--lilas); }
 table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; padding: 0.4rem; border-bottom: 1px solid #ddd; vertical-align: top; }
 input, select { font: inherit; max-width: 100%; }
+.confirmation { border-left: 4px solid var(--lilas); padding: 0.5rem 1rem; background: #f1ebfc; }
+main form { margin: 0.5rem 0; }
+li form { display: inline; margin-left: 0.5rem; }

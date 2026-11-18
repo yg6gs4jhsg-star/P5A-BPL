@@ -1,4 +1,5 @@
 import pytest
+from flask import g
 
 from app import create_app
 from app.models import Account, AdminEmail, db
@@ -38,6 +39,8 @@ def person(name, base_role="etudiant", admin=False):
 
 def log_in(client, account):
     """Ouvre la session de ce compte sans passer par le fournisseur OpenID."""
+    # Les requêtes de test partagent le contexte du test : on oublie la personne mémorisée par Flask-Login.
+    g.pop("_login_user", None)
     with client.session_transaction() as session:
         session["_user_id"] = str(account.id)
         session["_fresh"] = True
