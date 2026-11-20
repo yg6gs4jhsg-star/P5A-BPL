@@ -6,8 +6,7 @@ from app.accounts.auth import message
 from app.accounts.roles import is_admin
 from app.authorization.rules import can
 from app.models import STATUS_LABELS, Account, File, Invitation, Member, Project, Theme, db
-from app.projects import bp
-from app.projects import content, service
+from app.projects import bp, content, service
 from app.projects.service import TRANSITIONS, ProjectError, create_project
 
 # --- Constantes ---
@@ -107,9 +106,9 @@ def my_space():
 
 def visible_project(slug):
     """Le projet et « lisible ou non » ; 404 s'il n'est ni lisible ni public pour la personne."""
-    project = Project.query.filter_by(slug=slug).first()
-    readable = project is not None and can(current_user, "read_project", project)
-    if not readable and not (project is not None and can(current_user, "view_published", project)):
+    project = Project.query.filter_by(slug=slug).first() or abort(404)
+    readable = can(current_user, "read_project", project)
+    if not readable and not can(current_user, "view_published", project):
         abort(404)  # on ne révèle pas qu'un projet non public existe
     return project, readable
 

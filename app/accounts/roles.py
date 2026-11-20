@@ -24,9 +24,7 @@ def domain_of(email):
 def compute_base_role(email, groups):
     """Rôle de base depuis le compte Microsoft : « encadrant », « etudiant » ou None (refusé)."""
     domain, groups = domain_of(email), set(groups or ())
-    if domain == STAFF_DOMAIN:
-        return "encadrant"
-    if domain == STUDENT_DOMAIN and EXTERNAL_TEACHER_GROUP in groups:
+    if domain == STAFF_DOMAIN or (domain == STUDENT_DOMAIN and EXTERNAL_TEACHER_GROUP in groups):
         return "encadrant"
     if domain == STUDENT_DOMAIN and STUDENT_GROUP in groups:
         return "etudiant"

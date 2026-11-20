@@ -66,10 +66,8 @@ class Project(db.Model):
     members = db.relationship("Member", back_populates="project", cascade="all, delete-orphan")
     invitations = db.relationship("Invitation", back_populates="project", cascade="all, delete-orphan")
     files = db.relationship("File", back_populates="project", cascade="all, delete-orphan", order_by="File.id")
-    history = db.relationship(
-        "HistoryEvent", back_populates="project", cascade="all, delete-orphan",
-        order_by="(HistoryEvent.created_at, HistoryEvent.id)",
-    )
+    history = db.relationship("HistoryEvent", back_populates="project", cascade="all, delete-orphan",
+                              order_by="(HistoryEvent.created_at, HistoryEvent.id)")
 
 
 class Theme(db.Model):
@@ -105,9 +103,7 @@ class Invitation(db.Model):
     project_id = db.Column(db.ForeignKey("project.id", ondelete="CASCADE"), nullable=False)
     email = db.Column(db.String(254), nullable=False)
     role = db.Column(choice(INVITATION_ROLES, "invitation_role"), nullable=False)
-    expires_at = db.Column(
-        db.DateTime, nullable=False, default=lambda: utcnow() + timedelta(days=INVITATION_DAYS)
-    )
+    expires_at = db.Column(db.DateTime, nullable=False, default=lambda: utcnow() + timedelta(days=INVITATION_DAYS))
 
     project = db.relationship("Project", back_populates="invitations")
 

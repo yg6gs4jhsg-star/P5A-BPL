@@ -70,9 +70,7 @@ def fingerprint(text):
 
 def keep_attribute(tag, attribute, value):
     """Seules les images envoyées sur BluePrintLab s'affichent (pas d'image externe)."""
-    if tag == "img" and attribute == "src" and not value.startswith(FILES_URL):
-        return None
-    return value
+    return None if tag == "img" and attribute == "src" and not value.startswith(FILES_URL) else value
 
 
 def render(text):
@@ -176,7 +174,7 @@ def clean_file(data, mime_type):
 
 
 def write_file(project, file_uuid, data):
-    (project_dir(project, "files") / file_uuid).write_bytes(data)
+    file_path(project, file_uuid).write_bytes(data)
 
 
 def file_path(project, file_uuid):

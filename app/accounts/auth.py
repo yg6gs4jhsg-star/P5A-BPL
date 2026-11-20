@@ -5,7 +5,7 @@ from joserfc.errors import JoseError
 from requests import RequestException
 
 from app.accounts import bp
-from app.accounts.roles import compute_base_role
+from app.accounts.roles import compute_base_role, normalize_email
 from app.models import Account, Invitation, Member, db, utcnow
 
 # --- Constantes ---
@@ -42,13 +42,11 @@ def load_user(account_id):
 def account_from_claims(claims):
     """Crée ou met à jour le compte depuis un jeton vérifié ; None si la connexion est refusée."""
     email = claims.get("email") or claims.get("preferred_username")
-    if claims.get("tid") != current_app.config["OIDC_TENANT_ID"] or not claims.get("oid") or not email:
-        return None
-    base_role = compute_base_role(email, claims.get("groups"))
-    if base_role is None:
+    base_role = compute_base_role(email, claims.get("groups"))  # None aussi sans adresse
+    if claims.get("tid") != current_app.config["OIDC_TENANT_ID"] or not claims.get("oid") or base_role is None:
         return None
     account = Account.query.filter_by(oid=claims["oid"]).first() or Account(oid=claims["oid"])
-    account.email, account.name, account.base_role = email.strip().lower(), claims.get("name", email), base_role
+    account.email, account.name, account.base_role = normalize_email(email), claims.get("name", email), base_role
     db.session.add(account)
     join_invited_projects(account)
     db.session.commit()

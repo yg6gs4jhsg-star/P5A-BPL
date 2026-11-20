@@ -8,7 +8,7 @@ from sqlalchemy import func
 
 from app.accounts.roles import STAFF_DOMAIN, STUDENT_DOMAIN, domain_of, normalize_email
 from app.authorization.rules import can
-from app.models import Account, File, HistoryEvent, Invitation, Member, Project, Theme, db, utcnow
+from app.models import INVITATION_ROLES, Account, File, HistoryEvent, Invitation, Member, Project, Theme, db, utcnow
 from app.projects import content
 
 # --- Constantes ---
@@ -25,9 +25,6 @@ TRANSITIONS = {
     "accept_reedition": ("answer_reedition", {"reedition_demandee"}, "brouillon"),
     "refuse_reedition": ("answer_reedition", {"reedition_demandee"}, "publie"),
 }
-
-
-INVITATION_ROLES = ("collabo", "client")
 EPF_DOMAINS = (STAFF_DOMAIN, STUDENT_DOMAIN)
 
 
@@ -226,10 +223,9 @@ def save_draft(user, project, texts, versions, client_name="", client_logo=None,
     if client_logo and (client_logo.project_id != project.id or not client_logo.mime_type.startswith("image/")):
         raise ProjectError("Le logo doit être une image envoyée sur ce projet.")
     themes = chosen_themes(project.themes, theme_ids, new_theme)
-    for section in content.SECTIONS:
-        if content.fingerprint(content.read_section(project, "draft", section)) != versions.get(section):
-            raise ProjectError("Le projet a changé depuis votre ouverture : copiez votre texte, "
-                               "rechargez la page et recommencez.")
+    if any(content.fingerprint(content.read_section(project, "draft", s)) != versions.get(s) for s in content.SECTIONS):
+        raise ProjectError("Le projet a changé depuis votre ouverture : copiez votre texte, "
+                           "rechargez la page et recommencez.")
     with transaction():
         project.updated_at = utcnow()
         project.themes = themes
