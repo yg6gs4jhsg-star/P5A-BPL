@@ -1,10 +1,11 @@
 import io
-from pathlib import Path
 import struct
 import zlib
+from pathlib import Path
 
 import pytest
 
+from app import create_app
 from app.models import File, db
 from app.projects import content
 from app.projects.service import (
@@ -404,3 +405,54 @@ def test_fake_png_file_refused(client, people, project):
     response = client.post("/projets/drone/fichiers", data={"file": (io.BytesIO(fake), "faux.png")})
     assert response.status_code == 400 and "Type de fichier refusé" in response.text
     assert File.query.count() == 0
+
+
+# Étape 6b : aperçu en direct (HTMX) et barre d'outils.
+def test_live_preview_is_cleaned(client, people, project):
+    log_in(client, people["collabo"])
+    response = client.post("/projets/drone/apercu", data={"detail": "**Gras** <script>alert(1)</script>"})
+    assert response.status_code == 200 and "<strong>Gras</strong>" in response.text
+    assert "<script" not in response.text and "<html" not in response.text  # un fragment, pas une page
+
+
+@pytest.mark.parametrize("who, status", [("client", 403), ("exterieur", 404)])
+def test_live_preview_refused_without_right(client, people, project, who, status):
+    log_in(client, people[who])
+    assert client.post("/projets/drone/apercu", data={"resume": "x"}).status_code == status
+
+
+def test_live_preview_refused_once_submitted(client, people, project):
+    change_status(people["owner"], project, "submit")
+    log_in(client, people["owner"])
+    assert client.post("/projets/drone/apercu", data={"resume": "x"}).status_code == 403
+
+
+def test_live_preview_requires_csrf_token(tmp_path):
+    app = create_app({"TESTING": True, "SQLALCHEMY_DATABASE_URI": "sqlite://", "CONTENT_DIR": str(tmp_path)})
+    with app.app_context():
+        db.create_all()
+        owner = person("owner")
+        create_project(owner, "Drone")
+        client = app.test_client()
+        log_in(client, owner)
+        assert client.post("/projets/drone/apercu", data={"resume": "x"}).status_code == 400
+        db.session.remove()
+        db.engine.dispose()
+
+
+def test_editor_has_toolbar_and_htmx(client, people, project):
+    add_file(people["owner"], project, "photo.png", PNG)
+    log_in(client, people["owner"])
+    text = client.get("/projets/drone/editer").text
+    for tool in ("titre", "gras", "liste", "image"):
+        assert f'data-outil="{tool}"' in text
+    assert ">photo.png</option>" in text
+    assert 'hx-post="/projets/drone/apercu"' in text and 'hx-params="detail,csrf_token"' in text
+    assert "/static/htmx-2.0.4.min.js" in text and "/static/editor.js" in text
+    assert "https://" not in text  # aucun script venu d'un site externe
+    assert 'name="preview"' in text  # le bouton Aperçu reste si le JavaScript est coupé
+
+
+def test_htmx_only_on_editor(client, people, project):
+    log_in(client, people["owner"])
+    assert "<script" not in client.get("/projets/drone").text

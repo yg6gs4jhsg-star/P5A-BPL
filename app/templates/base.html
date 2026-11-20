@@ -23,5 +23,6 @@
     {% for confirmation in get_flashed_messages() %}<p class="confirmation">{{ confirmation }}</p>{% endfor %}
     {% block content %}{% endblock %}
   </main>
+  {% block scripts %}{% endblock %}
 </body>
 </html>

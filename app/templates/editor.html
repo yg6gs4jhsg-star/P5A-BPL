@@ -6,20 +6,32 @@
 {% if error %}<p class="alerte">{{ error }}</p>{% endif %}
 <p>Format Markdown : <code># Titre</code>, <code>**gras**</code>, <code>- liste</code>, <code>![légende](adresse d'une image envoyée)</code>.</p>
 
-<form method="post">
+<form method="post" data-brouillon="{{ project.uuid }}">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   {% for section, title in sections.items() %}
   <h2>{{ title }}</h2>
   <input type="hidden" name="version_{{ section }}" value="{{ versions[section] }}">
-  <textarea name="{{ section }}" rows="12">{{ texts[section] }}</textarea>
-  {% if previews %}<div class="apercu">{{ previews[section] }}</div>{% endif %}
+  <div class="outils" data-for="{{ section }}">
+    <button type="button" data-outil="titre">Titre</button>
+    <button type="button" data-outil="gras">Gras</button>
+    <button type="button" data-outil="liste">Liste</button>
+    <select aria-label="Image à insérer">{% for file in images %}<option value="{{ file.uuid }}">{{ file.original_name }}</option>{% endfor %}</select>
+    <button type="button" data-outil="image">Image</button>
+  </div>
+  <div class="cote-a-cote">
+    {# Aperçu en direct : HTMX envoie ce texte seul, avec le jeton CSRF, un court instant après la frappe. #}
+    <textarea name="{{ section }}" rows="12" hx-post="{{ url_for('projects.preview', slug=project.slug) }}"
+      hx-trigger="load, input changed delay:500ms" hx-target="#apercu-{{ section }}"
+      hx-params="{{ section }},csrf_token">{{ texts[section] }}</textarea>
+    <div class="apercu" id="apercu-{{ section }}">{{ previews[section] if previews }}</div>
+  </div>
   {% endfor %}
   <h2>Client ou société</h2>
   <p><label>Nom<br><input name="client_name" value="{{ client.name }}" maxlength="200"></label></p>
   <p><label>Logo (une image envoyée ci-dessous)<br>
     <select name="client_logo">
       <option value="">Pas de logo</option>
-      {% for file in project.files if file.mime_type.startswith("image/") %}
+      {% for file in images %}
       <option value="{{ file.uuid }}"{% if file.uuid == client.logo %} selected{% endif %}>{{ file.original_name }}</option>
       {% endfor %}
     </select></label></p>
@@ -47,4 +59,8 @@
 </form>
 <p>Types acceptés : {% for mime in config.ALLOWED_FILE_TYPES %}{{ mime.split("/")[1]|upper }}{{ ", " if not loop.last }}{% endfor %}.
   {{ config.MAX_FILE_MB }} Mo par fichier, {{ config.MAX_VIDEO_MB }} Mo par vidéo, {{ config.MAX_PROJECT_MB }} Mo par projet.</p>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='htmx-2.0.4.min.js') }}" defer></script>
+<script src="{{ url_for('static', filename='editor.js') }}" defer></script>
 {% endblock %}

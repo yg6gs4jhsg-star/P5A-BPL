@@ -194,6 +194,7 @@ def show_editor(project, texts=None, versions=None, client=None, preview=False, 
     return render_template(
         "editor.html", project=project, sections=content.SECTIONS, texts=texts, versions=versions,
         client=client or content.read_client(project, "draft"),
+        images=[file for file in project.files if file.mime_type.startswith("image/")],
         previews={s: content.render(t) for s, t in texts.items()} if preview else None, error=error,
     ), status
 
@@ -216,6 +217,13 @@ def edit_draft(slug):
         return show_editor(project, texts, versions, client, error=str(refusal), status=409)
     flash("Brouillon enregistré.")
     return redirect(url_for("projects.edit_draft", slug=slug))
+
+
+@bp.route("/projets/<slug>/apercu", methods=["POST"])
+def preview(slug):
+    """Fragment HTML de l'aperçu en direct (HTMX) : même rendu nettoyé que la page publique."""
+    editable_project(slug)
+    return content.render(next((request.form[s] for s in content.SECTIONS if s in request.form), ""))
 
 
 @bp.route("/projets/<slug>/fichiers", methods=["POST"])

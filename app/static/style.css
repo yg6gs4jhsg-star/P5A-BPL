@@ -30,3 +30,5 @@ textarea { width: 100%; box-sizing: border-box; font: inherit; }
 .apercu { border: 1px dashed var(--lilas); padding: 0 1rem; margin: 0.5rem 0; }
 main img, main video { max-width: 100%; }
 .logo { max-height: 3rem; vertical-align: middle; }
+.cote-a-cote { display: grid; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); gap: 0.5rem; }
+.outils { display: flex; flex-wrap: wrap; gap: 0.25rem; margin-bottom: 0.25rem; }
