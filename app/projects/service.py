@@ -194,15 +194,21 @@ def transfer_ownership(user, project, target):
         new_owner.role = "owner"
 
 
-def save_draft(user, project, texts, versions):
-    """Enregistre les sections du brouillon, sauf si quelqu'un les a modifiées depuis l'ouverture."""
+def save_draft(user, project, texts, versions, client_name="", client_logo=None):
+    """Enregistre le brouillon et le client, sauf si quelqu'un a modifié les textes depuis l'ouverture."""
     require(user, "edit_draft", project)
+    client_name = (client_name or "").strip()
+    if len(client_name) > TITLE_MAX:
+        raise ProjectError(f"Le nom du client fait au plus {TITLE_MAX} caractères.")
+    if client_logo and (client_logo.project_id != project.id or not client_logo.mime_type.startswith("image/")):
+        raise ProjectError("Le logo doit être une image envoyée sur ce projet.")
     for section in content.SECTIONS:
         if content.fingerprint(content.read_section(project, "draft", section)) != versions.get(section):
             raise ProjectError("Le projet a changé depuis votre ouverture : copiez votre texte, "
                                "rechargez la page et recommencez.")
     with transaction():
         project.updated_at = utcnow()
+        project.client_name, project.client_logo = client_name or None, client_logo
         for section in content.SECTIONS:
             content.write_section(project, section, texts.get(section, ""))
 
@@ -212,7 +218,7 @@ def add_file(user, project, original_name, data):
     require(user, "edit_draft", project)
     mime_type = content.detect_type(data)
     if mime_type is None:
-        raise ProjectError("Type de fichier refusé : images PNG ou JPEG, PDF, vidéos MP4.")
+        raise ProjectError("Type de fichier refusé : voir les types acceptés sous le formulaire.")
     if len(data) > content.max_size(mime_type):
         raise ProjectError(f"Fichier trop lourd : {content.max_size(mime_type) // content.MB} Mo au maximum.")
     used = db.session.query(func.coalesce(func.sum(File.size), 0)).filter_by(project_id=project.id).scalar()
@@ -226,3 +232,17 @@ def add_file(user, project, original_name, data):
         db.session.flush()  # attribue l'UUID, nom sur le disque
         content.write_file(project, stored.uuid, data)
     return stored
+
+
+def delete_file(user, project, stored):
+    """Supprime un fichier du brouillon, sauf s'il sert à la version publiée encore en ligne."""
+    require(user, "edit_draft", project)
+    if stored.project_id != project.id:
+        raise ProjectError("Ce fichier ne concerne pas ce projet.")
+    if content.is_published_file(project, stored.uuid):
+        raise ProjectError("Ce fichier est utilisé par la version publiée : il ne peut pas être supprimé.")
+    with transaction():
+        if project.client_logo == stored:
+            project.client_logo = None
+        db.session.delete(stored)
+    content.delete_file(project, stored.uuid)  # après l'enregistrement : au pire, un fichier orphelin

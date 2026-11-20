@@ -6,6 +6,9 @@
 <h1>{{ project.title }}</h1>
 {% if readable %}<p>Statut : {{ project.status|label }}</p>{% endif %}
 <p>Encadrant : {{ project.supervisor.name if project.supervisor else "pas encore attribué" }}</p>
+{% if project.client_name or project.client_logo %}
+<p>Client : {% if project.client_logo %}<img class="logo" src="/fichiers/{{ project.client_logo.uuid }}" alt="Logo">{% endif %} {{ project.client_name or "" }}</p>
+{% endif %}
 
 {% if error %}<p class="alerte">{{ error }}</p>{% endif %}
 {% if can_edit %}<p><a href="{{ url_for('projects.edit_draft', slug=project.slug) }}">Modifier le brouillon</a></p>{% endif %}

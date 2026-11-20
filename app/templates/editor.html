@@ -14,6 +14,15 @@
   <textarea name="{{ section }}" rows="12">{{ texts[section] }}</textarea>
   {% if previews %}<div class="apercu">{{ previews[section] }}</div>{% endif %}
   {% endfor %}
+  <h2>Client ou société</h2>
+  <p><label>Nom<br><input name="client_name" value="{{ client.name }}" maxlength="200"></label></p>
+  <p><label>Logo (une image envoyée ci-dessous)<br>
+    <select name="client_logo_id">
+      <option value="">Pas de logo</option>
+      {% for file in project.files if file.mime_type.startswith("image/") %}
+      <option value="{{ file.id }}"{% if file.id == client.logo_id %} selected{% endif %}>{{ file.original_name }}</option>
+      {% endfor %}
+    </select></label></p>
   <p><button name="preview" value="1">Aperçu</button> <button>Enregistrer</button></p>
 </form>
 
@@ -21,15 +30,21 @@
 <ul>
   {% for file in project.files %}
   <li>{{ file.original_name }} ({{ (file.size / 1048576)|round(1) }} Mo) :
-    <code>{% if file.mime_type.startswith("image/") %}!{% endif %}[{{ file.original_name }}](/fichiers/{{ file.uuid }})</code></li>
+    <code>{% if file.mime_type.startswith("image/") %}!{% endif %}[{{ file.original_name }}](/fichiers/{{ file.uuid }})</code>
+    <form method="post" action="{{ url_for('projects.remove_file', slug=project.slug) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="file_id" value="{{ file.id }}">
+      <button>Supprimer</button>
+    </form></li>
   {% else %}
   <li>Aucun fichier.</li>
   {% endfor %}
 </ul>
 <form method="post" action="{{ url_for('projects.upload_file', slug=project.slug) }}" enctype="multipart/form-data">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-  <input type="file" name="file" accept=".png,.jpg,.jpeg,.pdf,.mp4" required>
+  <input type="file" name="file" accept="{{ config.ALLOWED_FILE_TYPES|join(',') }}" required>
   <button>Envoyer</button>
 </form>
-<p>Images et PDF : {{ config.MAX_FILE_MB }} Mo au maximum ; vidéos MP4 : {{ config.MAX_VIDEO_MB }} Mo ; {{ config.MAX_PROJECT_MB }} Mo par projet.</p>
+<p>Types acceptés : {% for mime in config.ALLOWED_FILE_TYPES %}{{ mime.split("/")[1]|upper }}{{ ", " if not loop.last }}{% endfor %}.
+  {{ config.MAX_FILE_MB }} Mo par fichier, {{ config.MAX_VIDEO_MB }} Mo par vidéo, {{ config.MAX_PROJECT_MB }} Mo par projet.</p>
 {% endblock %}

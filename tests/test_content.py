@@ -6,7 +6,9 @@ import pytest
 
 from app.models import File, db
 from app.projects import content
-from app.projects.service import ProjectError, add_file, change_status, create_project, invite, save_draft
+from app.projects.service import (
+    ProjectError, add_file, change_status, create_project, delete_file, invite, save_draft,
+)
 from tests.conftest import log_in, person
 
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
@@ -19,6 +21,14 @@ def png_chunk(kind, data):
 PNG = PNG_SIGNATURE + png_chunk(b"IHDR", b"\0" * 13) + png_chunk(b"eXIf", b"GPS 43.6N") + png_chunk(b"IEND", b"")
 JPEG = b"\xff\xd8" + b"\xff\xe1\x00\x09ExifGPS" + b"\xff\xdb\x00\x04\x01\x02" + b"\xff\xda\x00\x02IMAGE\xff\xd9"
 PDF = b"%PDF-1.7 contenu"
+
+
+def riff_chunk(kind, data):
+    return kind + struct.pack("<I", len(data)) + data + b"\0" * (len(data) % 2)
+
+
+WEBP_BODY = b"WEBP" + riff_chunk(b"VP8X", b"\x08" + b"\0" * 9) + riff_chunk(b"VP8 ", b"IMG") + riff_chunk(b"EXIF", b"GPS")
+WEBP = b"RIFF" + struct.pack("<I", len(WEBP_BODY)) + WEBP_BODY
 
 
 @pytest.fixture
@@ -107,6 +117,24 @@ def test_jpeg_gps_removed(people, project):
     assert b"GPS" not in data and data.startswith(b"\xff\xd8\xff\xdb") and data.endswith(b"IMAGE\xff\xd9")
 
 
+def test_webp_gps_removed(people, project):
+    stored = add_file(people["owner"], project, "photo.webp", WEBP)
+    data = content.file_path(project, stored.uuid).read_bytes()
+    assert stored.mime_type == "image/webp" and b"GPS" not in data and b"VP8 " in data
+    assert struct.unpack("<I", data[4:8])[0] == len(data) - 8  # taille RIFF mise à jour
+    assert data[20] & 0x08 == 0  # l'en-tête VP8X n'annonce plus d'EXIF
+
+
+def test_allowed_types_come_from_settings(app, people, project):
+    app.config["ALLOWED_FILE_TYPES"] = ["image/png"]
+    with pytest.raises(ProjectError, match="Type de fichier refusé"):
+        add_file(people["owner"], project, "doc.pdf", PDF)
+
+
+def test_quick_presentation_prefilled(project):
+    assert content.read_section(project, "draft", "resume") == "## Objectifs\n\n## Description\n\n## Réalisations\n"
+
+
 def test_file_stored_under_random_name(people, project):
     stored = add_file(people["owner"], project, "../../danger.pdf", PDF)
     assert content.file_path(project, stored.uuid).read_bytes() == PDF
@@ -156,7 +184,8 @@ def test_preview_does_not_save(client, people, project):
     log_in(client, people["owner"])
     data = {"resume": "**Essai**", "preview": "1", **{f"version_{s}": v for s, v in versions(project).items()}}
     response = client.post("/projets/drone/editer", data=data)
-    assert "<strong>Essai</strong>" in response.text and content.read_section(project, "draft", "resume") == ""
+    assert "<strong>Essai</strong>" in response.text
+    assert content.read_section(project, "draft", "resume") == content.DEFAULT_TEXTS["resume"]
 
 
 def test_conflict_keeps_typed_text(client, people, project):
@@ -233,3 +262,93 @@ def test_visitor_sees_published_version_not_draft(client, people, project):
     log_in(client, people["owner"])
     assert "Travail en cours" in client.get("/projets/drone").text
     db.session.remove()
+
+
+# Suppression d'un fichier.
+def test_delete_file(people, project):
+    stored = add_file(people["collabo"], project, "doc.pdf", PDF)
+    path = content.file_path(project, stored.uuid)
+    delete_file(people["collabo"], project, stored)
+    assert File.query.count() == 0 and not path.exists()
+
+
+def test_delete_file_refused_outside_draft_or_without_right(people, project):
+    stored = add_file(people["owner"], project, "doc.pdf", PDF)
+    with pytest.raises(ProjectError, match="droit"):
+        delete_file(people["client"], project, stored)
+    change_status(people["owner"], project, "submit")
+    with pytest.raises(ProjectError, match="droit"):
+        delete_file(people["owner"], project, stored)
+
+
+def test_file_of_published_version_cannot_be_deleted(people, project):
+    stored = add_file(people["owner"], project, "photo.png", PNG)
+    save_draft(people["owner"], project, {"resume": f"![p](/fichiers/{stored.uuid})"}, versions(project))
+    publish(project, people)
+    change_status(people["owner"], project, "request_reedition")
+    change_status(people["encadrant"], project, "accept_reedition")
+    with pytest.raises(ProjectError, match="version publiée"):
+        delete_file(people["owner"], project, stored)
+
+
+def test_file_of_another_project_refused(people, project):
+    other = create_project(people["collabo"], "Autre")
+    stored = add_file(people["collabo"], other, "doc.pdf", PDF)
+    with pytest.raises(ProjectError, match="ne concerne pas"):
+        delete_file(people["owner"], project, stored)
+
+
+def test_delete_file_from_editor(client, people, project):
+    stored = add_file(people["owner"], project, "doc.pdf", PDF)
+    log_in(client, people["owner"])
+    assert client.post("/projets/drone/fichiers/supprimer", data={"file_id": stored.id}).location == "/projets/drone/editer"
+    assert File.query.count() == 0
+    log_in(client, people["client"])
+    assert client.post("/projets/drone/fichiers/supprimer", data={"file_id": 1}).status_code == 403
+
+
+# Client ou société avec logo (EDI-05).
+def test_client_name_and_logo(people, project):
+    logo = add_file(people["owner"], project, "logo.png", PNG)
+    save_draft(people["owner"], project, {}, versions(project), "  Airbus  ", logo)
+    assert (project.client_name, project.client_logo) == ("Airbus", logo)
+    delete_file(people["owner"], project, logo)
+    assert project.client_logo is None
+
+
+@pytest.mark.parametrize("bad", ["pdf", "other_project"])
+def test_logo_must_be_an_image_of_the_project(people, project, bad):
+    if bad == "pdf":
+        logo = add_file(people["owner"], project, "doc.pdf", PDF)
+    else:
+        logo = add_file(people["collabo"], create_project(people["collabo"], "Autre"), "logo.png", PNG)
+    with pytest.raises(ProjectError, match="logo"):
+        save_draft(people["owner"], project, {}, versions(project), "Airbus", logo)
+
+
+def test_client_name_too_long(people, project):
+    with pytest.raises(ProjectError, match="client"):
+        save_draft(people["owner"], project, {}, versions(project), "x" * 201)
+
+
+def test_client_from_editor_and_public_logo(client, people, project):
+    logo = add_file(people["owner"], project, "logo.png", PNG)
+    log_in(client, people["owner"])
+    data = {"client_name": "Airbus", "client_logo_id": logo.id, **{f"version_{s}": v for s, v in versions(project).items()}}
+    client.post("/projets/drone/editer", data=data)
+    assert 'value="Airbus"' in client.get("/projets/drone/editer").text
+    publish(project, people)
+    client.post("/logout")
+    page = client.get("/projets/drone").text
+    assert "Client :" in page and "Airbus" in page and f"/fichiers/{logo.uuid}" in page
+    response = client.get(f"/fichiers/{logo.uuid}")
+    assert response.status_code == 200
+    response.close()
+
+
+def test_project_with_logo_can_be_deleted_from_database(people, project):
+    project.client_logo = add_file(people["owner"], project, "logo.png", PNG)
+    db.session.commit()
+    db.session.delete(project)
+    db.session.commit()
+    assert File.query.count() == 0

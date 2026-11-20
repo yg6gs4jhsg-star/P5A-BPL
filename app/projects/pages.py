@@ -185,9 +185,14 @@ def editable_project(slug):
     return project
 
 
-def show_editor(project, texts, versions, preview=False, error=None, status=200):
+def show_editor(project, texts=None, versions=None, client=None, preview=False, error=None, status=200):
+    """Éditeur ; sans textes donnés, ceux du disque et leurs empreintes d'ouverture."""
+    if texts is None:
+        texts = {s: content.read_section(project, "draft", s) for s in content.SECTIONS}
+        versions = {s: content.fingerprint(t) for s, t in texts.items()}
     return render_template(
         "editor.html", project=project, sections=content.SECTIONS, texts=texts, versions=versions,
+        client=client or {"name": project.client_name or "", "logo_id": project.client_logo_id},
         previews={s: content.render(t) for s, t in texts.items()} if preview else None, error=error,
     ), status
 
@@ -197,16 +202,17 @@ def show_editor(project, texts, versions, preview=False, error=None, status=200)
 def edit_draft(slug):
     project = editable_project(slug)
     if request.method == "GET":
-        texts = {s: content.read_section(project, "draft", s) for s in content.SECTIONS}
-        return show_editor(project, texts, {s: content.fingerprint(t) for s, t in texts.items()})
+        return show_editor(project)
     texts = {s: request.form.get(s, "").replace("\r\n", "\n") for s in content.SECTIONS}
     versions = {s: request.form.get(f"version_{s}") for s in content.SECTIONS}
+    client = {"name": request.form.get("client_name", ""), "logo_id": request.form.get("client_logo_id", type=int)}
     if request.form.get("preview"):
-        return show_editor(project, texts, versions, preview=True)
+        return show_editor(project, texts, versions, client, preview=True)
     try:
-        service.save_draft(current_user, project, texts, versions)
+        logo = db.session.get(File, client["logo_id"]) if client["logo_id"] else None
+        service.save_draft(current_user, project, texts, versions, client["name"], logo)
     except ProjectError as refusal:
-        return show_editor(project, texts, versions, error=str(refusal), status=409)
+        return show_editor(project, texts, versions, client, error=str(refusal), status=409)
     flash("Brouillon enregistré.")
     return redirect(url_for("projects.edit_draft", slug=slug))
 
@@ -221,20 +227,29 @@ def upload_file(slug):
             raise ProjectError("Choisissez un fichier.")
         service.add_file(current_user, project, upload.filename, upload.read())
     except ProjectError as refusal:
-        texts = {s: content.read_section(project, "draft", s) for s in content.SECTIONS}
-        return show_editor(project, texts, {s: content.fingerprint(t) for s, t in texts.items()},
-                           error=str(refusal), status=400)
+        return show_editor(project, error=str(refusal), status=400)
     flash("Fichier ajouté.")
+    return redirect(url_for("projects.edit_draft", slug=slug))
+
+
+@bp.route("/projets/<slug>/fichiers/supprimer", methods=["POST"])
+@login_required
+def remove_file(slug):
+    project = editable_project(slug)
+    try:
+        service.delete_file(current_user, project, from_form(File, "file_id"))
+    except ProjectError as refusal:
+        return show_editor(project, error=str(refusal), status=400)
+    flash("Fichier supprimé.")
     return redirect(url_for("projects.edit_draft", slug=slug))
 
 
 @bp.route("/fichiers/<file_uuid>")
 def download_file(file_uuid):
-    """Mêmes droits que la page du projet ; le public ne voit que les fichiers de la version validée."""
+    """Mêmes droits que la page du projet ; le public ne voit que le logo et les fichiers de la version validée."""
     stored = File.query.filter_by(uuid=file_uuid).first() or abort(404)
     project, readable = visible_project(stored.project.slug)
-    if not readable and not any(content.FILES_URL + file_uuid in content.read_section(project, "published", s)
-                                for s in content.SECTIONS):
+    if not readable and project.client_logo != stored and not content.is_published_file(project, file_uuid):
         abort(404)
     return send_file(content.file_path(project, file_uuid), mimetype=stored.mime_type,
                      download_name=stored.original_name)

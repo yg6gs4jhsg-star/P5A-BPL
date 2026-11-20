@@ -10,12 +10,16 @@ from markupsafe import Markup
 
 # --- Constantes ---
 SECTIONS = {"resume": "Présentation rapide", "detail": "Page détaillée"}  # un fichier .md par section
+# Texte de départ de la présentation rapide (PUB-03).
+DEFAULT_TEXTS = {"resume": "## Objectifs\n\n## Description\n\n## Réalisations\n"}
 FILES_URL = "/fichiers/"
-# Signature du début du fichier -> type ; le type vient du contenu réel, jamais de l'extension.
+# Type -> octets attendus (position, valeur) ; le type vient du contenu réel, jamais de l'extension.
 SIGNATURES = {
-    b"\x89PNG\r\n\x1a\n": "image/png",
-    b"\xff\xd8\xff": "image/jpeg",
-    b"%PDF-": "application/pdf",
+    "image/png": ((0, b"\x89PNG\r\n\x1a\n"),),
+    "image/jpeg": ((0, b"\xff\xd8\xff"),),
+    "image/webp": ((0, b"RIFF"), (8, b"WEBP")),
+    "application/pdf": ((0, b"%PDF-"),),
+    "video/mp4": ((4, b"ftyp"),),
 }
 VIDEO_TYPE = "video/mp4"
 MB = 1024 * 1024
@@ -30,6 +34,8 @@ def project_dir(project, folder):
 def create_folders(project):
     for folder in FOLDERS:
         project_dir(project, folder).mkdir(parents=True)
+    for section, text in DEFAULT_TEXTS.items():
+        write_section(project, section, text)
 
 
 def read_section(project, folder, section):
@@ -63,10 +69,11 @@ def render(text):
 
 
 def detect_type(data):
-    for signature, mime_type in SIGNATURES.items():
-        if data.startswith(signature):
-            return mime_type
-    return VIDEO_TYPE if data[4:8] == b"ftyp" else None
+    """Type reconnu et autorisé par le réglage allowed_file_types, sinon None."""
+    for mime_type, parts in SIGNATURES.items():
+        if all(data[start:start + len(value)] == value for start, value in parts):
+            return mime_type if mime_type in current_app.config["ALLOWED_FILE_TYPES"] else None
+    return None
 
 
 def max_size(mime_type):
@@ -99,7 +106,22 @@ def strip_png_metadata(data):
     return b"".join(kept)
 
 
-STRIPPERS = {"image/jpeg": strip_jpeg_metadata, "image/png": strip_png_metadata}
+def strip_webp_metadata(data):
+    """Retire le bloc EXIF (dont la position GPS) d'un WebP et met à jour les tailles."""
+    kept, position = [], 12
+    while position + 8 <= len(data):
+        size = int.from_bytes(data[position + 4:position + 8], "little")
+        chunk = bytearray(data[position:position + 8 + size + size % 2])  # blocs alignés sur 2 octets
+        if chunk[:4] == b"VP8X":
+            chunk[8] &= ~0x08  # l'en-tête n'annonce plus d'EXIF
+        if chunk[:4] != b"EXIF":
+            kept.append(bytes(chunk))
+        position += len(chunk)
+    body = b"WEBP" + b"".join(kept)
+    return b"RIFF" + len(body).to_bytes(4, "little") + body
+
+
+STRIPPERS = {"image/jpeg": strip_jpeg_metadata, "image/png": strip_png_metadata, "image/webp": strip_webp_metadata}
 
 
 def clean_file(data, mime_type):
@@ -112,3 +134,12 @@ def write_file(project, file_uuid, data):
 
 def file_path(project, file_uuid):
     return project_dir(project, "files") / file_uuid
+
+
+def delete_file(project, file_uuid):
+    file_path(project, file_uuid).unlink(missing_ok=True)
+
+
+def is_published_file(project, file_uuid):
+    """Le fichier est cité par la version validée du projet."""
+    return any(FILES_URL + file_uuid in read_section(project, "published", s) for s in SECTIONS)

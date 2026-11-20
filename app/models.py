@@ -56,6 +56,8 @@ class Project(db.Model):
     theme = db.Column(db.String(100))
     status = db.Column(choice(STATUSES, "status"), nullable=False, default="brouillon")
     supervisor_id = db.Column(db.ForeignKey("account.id", ondelete="SET NULL"))
+    client_name = db.Column(db.String(200))  # client ou société (EDI-05)
+    client_logo_id = db.Column(db.ForeignKey("file.id", ondelete="SET NULL", use_alter=True))
     is_featured = db.Column(db.Boolean, nullable=False, default=False)
     deleted_at = db.Column(db.DateTime)  # corbeille de 30 jours
     first_published_at = db.Column(db.DateTime)
@@ -65,7 +67,10 @@ class Project(db.Model):
     supervisor = db.relationship("Account")
     members = db.relationship("Member", back_populates="project", cascade="all, delete-orphan")
     invitations = db.relationship("Invitation", back_populates="project", cascade="all, delete-orphan")
-    files = db.relationship("File", back_populates="project", cascade="all, delete-orphan", order_by="File.id")
+    # post_update : le projet et son logo se citent l'un l'autre.
+    client_logo = db.relationship("File", foreign_keys=[client_logo_id], post_update=True)
+    files = db.relationship("File", back_populates="project", cascade="all, delete-orphan",
+                            foreign_keys="File.project_id", order_by="File.id")
     history = db.relationship(
         "HistoryEvent", back_populates="project", cascade="all, delete-orphan",
         order_by="(HistoryEvent.created_at, HistoryEvent.id)",
@@ -125,4 +130,4 @@ class File(db.Model):
     sha256 = db.Column(db.String(64), nullable=False)  # empreinte
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
 
-    project = db.relationship("Project", back_populates="files")
+    project = db.relationship("Project", back_populates="files", foreign_keys=[project_id])
