@@ -141,7 +141,7 @@ def test_cancel_invitation_of_another_project_refused(people, project):
 def test_transfer_refused_to_non_collabo(people, project, target):
     invite(people["owner"], project, "prof@epf.fr", "client")
     targets = {"owner": people["owner"], "prof": people["prof"], "client": people["prof"]}
-    with pytest.raises(ProjectError, match="Collabo"):
+    with pytest.raises(ProjectError, match="Collaborateur"):
         transfer_ownership(people["owner"], project, targets[target])
 
 

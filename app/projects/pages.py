@@ -13,7 +13,7 @@ from app.projects.service import TRANSITIONS, ProjectError, create_project
 # --- Constantes ---
 LABELS = {
     **STATUS_LABELS,
-    "owner": "Owner", "collabo": "Collabo", "client": "Client",
+    "owner": "Owner", "collabo": "Collaborateur", "client": "Client",
     "encadrant": "Encadrant", "etudiant": "Étudiant",
 }
 ROLE_ORDER = ("owner", "collabo", "client", "encadrant")

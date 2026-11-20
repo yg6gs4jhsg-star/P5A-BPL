@@ -213,7 +213,7 @@ def test_action_without_csrf_token_refused(tmp_path):
 
 
 def test_full_journey(client, people):
-    """Création, invitation d'un Collabo, soumission, publication, réédition demandée puis acceptée."""
+    """Création, invitation d'un Collaborateur, soumission, publication, réédition demandée puis acceptée."""
     def as_(who):
         log_in(client, people[who])
         return client

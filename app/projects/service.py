@@ -140,7 +140,7 @@ def invite(user, project, email, role):
     """Compte existant : membre tout de suite. Sinon : invitation de 30 jours, acceptée à la première connexion."""
     require(user, "manage_members", project)
     if role not in INVITATION_ROLES:
-        raise ProjectError("Le rôle doit être Collabo ou Client.")
+        raise ProjectError("Le rôle doit être Collaborateur ou Client.")
     email = normalize_email(email)
     domain = domain_of(email)
     if domain not in EPF_DOMAINS:
@@ -148,7 +148,7 @@ def invite(user, project, email, role):
     account = Account.query.filter_by(email=email).first()
     is_student = account.base_role == "etudiant" if account else domain == STUDENT_DOMAIN
     if role == "collabo" and not is_student:
-        raise ProjectError("Un Collabo doit être un étudiant.")
+        raise ProjectError("Un Collaborateur doit être un étudiant.")
     if account and Member.query.filter_by(project_id=project.id, account_id=account.id).first():
         raise ProjectError("Cette personne fait déjà partie de l'équipe.")
     pending = Invitation.query.filter_by(project_id=project.id, email=email).first()
@@ -184,11 +184,11 @@ def cancel_invitation(user, project, invitation):
 
 
 def transfer_ownership(user, project, target):
-    """Le Collabo choisi devient Owner ; l'ancien Owner devient Collabo."""
+    """Le Collaborateur choisi devient Owner ; l'ancien Owner devient Collaborateur."""
     require(user, "transfer_ownership", project)
     new_owner = Member.query.filter_by(project_id=project.id, account_id=target.id, role="collabo").first()
     if new_owner is None:
-        raise ProjectError("Le nouvel Owner doit être un Collabo du projet.")
+        raise ProjectError("Le nouvel Owner doit être un Collaborateur du projet.")
     with transaction():
         Member.query.filter_by(project_id=project.id, role="owner").one().role = "collabo"
         new_owner.role = "owner"

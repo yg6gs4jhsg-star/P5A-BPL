@@ -58,7 +58,7 @@ def account_from_claims(claims):
 def join_invited_projects(account):
     """Les invitations valables deviennent des membres (même transaction que le compte).
 
-    Une invitation « collabo » attend si la personne est encadrante : un Collabo est un étudiant.
+    Une invitation de Collaborateur attend si la personne est encadrante : un Collaborateur est un étudiant.
     """
     for invitation in Invitation.query.filter(Invitation.email == account.email, Invitation.expires_at > utcnow()):
         if invitation.role == "collabo" and account.base_role != "etudiant":
