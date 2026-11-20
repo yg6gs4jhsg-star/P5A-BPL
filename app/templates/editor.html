@@ -17,10 +17,10 @@
   <h2>Client ou société</h2>
   <p><label>Nom<br><input name="client_name" value="{{ client.name }}" maxlength="200"></label></p>
   <p><label>Logo (une image envoyée ci-dessous)<br>
-    <select name="client_logo_id">
+    <select name="client_logo">
       <option value="">Pas de logo</option>
       {% for file in project.files if file.mime_type.startswith("image/") %}
-      <option value="{{ file.id }}"{% if file.id == client.logo_id %} selected{% endif %}>{{ file.original_name }}</option>
+      <option value="{{ file.uuid }}"{% if file.uuid == client.logo %} selected{% endif %}>{{ file.original_name }}</option>
       {% endfor %}
     </select></label></p>
   <p><button name="preview" value="1">Aperçu</button> <button>Enregistrer</button></p>

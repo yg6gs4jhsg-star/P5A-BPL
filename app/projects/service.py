@@ -208,7 +208,7 @@ def save_draft(user, project, texts, versions, client_name="", client_logo=None)
                                "rechargez la page et recommencez.")
     with transaction():
         project.updated_at = utcnow()
-        project.client_name, project.client_logo = client_name or None, client_logo
+        content.write_client(project, client_name, client_logo.uuid if client_logo else None)
         for section in content.SECTIONS:
             content.write_section(project, section, texts.get(section, ""))
 
@@ -224,7 +224,10 @@ def add_file(user, project, original_name, data):
     used = db.session.query(func.coalesce(func.sum(File.size), 0)).filter_by(project_id=project.id).scalar()
     if used + len(data) > current_app.config["MAX_PROJECT_MB"] * content.MB:
         raise ProjectError(f"Ce projet a atteint sa limite de {current_app.config['MAX_PROJECT_MB']} Mo de fichiers.")
-    data = content.clean_file(data, mime_type)
+    try:
+        data = content.clean_file(data, mime_type)
+    except content.DamagedFile:
+        raise ProjectError("Fichier abîmé ou incomplet : il n'a pas été enregistré.") from None
     stored = File(project=project, original_name=(original_name or "fichier")[:255], mime_type=mime_type,
                   size=len(data), sha256=hashlib.sha256(data).hexdigest())
     with transaction():
@@ -242,7 +245,8 @@ def delete_file(user, project, stored):
     if content.is_published_file(project, stored.uuid):
         raise ProjectError("Ce fichier est utilisé par la version publiée : il ne peut pas être supprimé.")
     with transaction():
-        if project.client_logo == stored:
-            project.client_logo = None
+        client = content.read_client(project, "draft")
+        if client["logo"] == stored.uuid:
+            content.write_client(project, client["name"], None)
         db.session.delete(stored)
     content.delete_file(project, stored.uuid)  # après l'enregistrement : au pire, un fichier orphelin

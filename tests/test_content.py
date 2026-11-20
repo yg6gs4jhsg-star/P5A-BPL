@@ -1,4 +1,5 @@
 import io
+from pathlib import Path
 import struct
 import zlib
 
@@ -20,7 +21,7 @@ def png_chunk(kind, data):
 
 PNG = PNG_SIGNATURE + png_chunk(b"IHDR", b"\0" * 13) + png_chunk(b"eXIf", b"GPS 43.6N") + png_chunk(b"IEND", b"")
 JPEG = b"\xff\xd8" + b"\xff\xe1\x00\x09ExifGPS" + b"\xff\xdb\x00\x04\x01\x02" + b"\xff\xda\x00\x02IMAGE\xff\xd9"
-PDF = b"%PDF-1.7 contenu"
+PDF = b"%PDF-1.7 contenu\n%%EOF\n"
 
 
 def riff_chunk(kind, data):
@@ -311,9 +312,9 @@ def test_delete_file_from_editor(client, people, project):
 def test_client_name_and_logo(people, project):
     logo = add_file(people["owner"], project, "logo.png", PNG)
     save_draft(people["owner"], project, {}, versions(project), "  Airbus  ", logo)
-    assert (project.client_name, project.client_logo) == ("Airbus", logo)
+    assert content.read_client(project, "draft") == {"name": "Airbus", "logo": logo.uuid}
     delete_file(people["owner"], project, logo)
-    assert project.client_logo is None
+    assert content.read_client(project, "draft") == {"name": "Airbus", "logo": None}
 
 
 @pytest.mark.parametrize("bad", ["pdf", "other_project"])
@@ -334,7 +335,7 @@ def test_client_name_too_long(people, project):
 def test_client_from_editor_and_public_logo(client, people, project):
     logo = add_file(people["owner"], project, "logo.png", PNG)
     log_in(client, people["owner"])
-    data = {"client_name": "Airbus", "client_logo_id": logo.id, **{f"version_{s}": v for s, v in versions(project).items()}}
+    data = {"client_name": "Airbus", "client_logo": logo.uuid, **{f"version_{s}": v for s, v in versions(project).items()}}
     client.post("/projets/drone/editer", data=data)
     assert 'value="Airbus"' in client.get("/projets/drone/editer").text
     publish(project, people)
@@ -346,9 +347,60 @@ def test_client_from_editor_and_public_logo(client, people, project):
     response.close()
 
 
-def test_project_with_logo_can_be_deleted_from_database(people, project):
-    project.client_logo = add_file(people["owner"], project, "logo.png", PNG)
-    db.session.commit()
-    db.session.delete(project)
-    db.session.commit()
+
+def test_client_change_during_reedition_not_public_before_publication(client, people, project):
+    old_logo, new_logo = (add_file(people["owner"], project, name, PNG) for name in ("ancien.png", "nouveau.png"))
+    save_draft(people["owner"], project, {}, versions(project), "Ancien client", old_logo)
+    publish(project, people)
+    change_status(people["owner"], project, "request_reedition")
+    change_status(people["encadrant"], project, "accept_reedition")
+    save_draft(people["owner"], project, {}, versions(project), "Nouveau client", new_logo)
+    page = client.get("/projets/drone").text
+    assert "Ancien client" in page and old_logo.uuid in page
+    assert "Nouveau client" not in page and new_logo.uuid not in page
+    with pytest.raises(ProjectError, match="version publiée"):
+        delete_file(people["owner"], project, old_logo)  # logo encore en ligne
+    change_status(people["owner"], project, "submit")
+    change_status(people["encadrant"], project, "publish")
+    page = client.get("/projets/drone").text
+    assert "Nouveau client" in page and new_logo.uuid in page
+
+
+# NFS-04 avec de vrais fichiers (tests/fixtures, créés par Pillow avec une position GPS à Montpellier).
+FIXTURES = Path(__file__).parent / "fixtures"
+REAL_IMAGES = {"gps.jpg": "image/jpeg", "gps.png": "image/png", "gps.webp": "image/webp"}
+
+
+@pytest.mark.parametrize("name", REAL_IMAGES)
+def test_real_photo_comes_out_without_gps(people, project, name):
+    original = (FIXTURES / name).read_bytes()
+    assert b"Appareil Test" in original and b"\x88\x25" in original  # bloc EXIF avec sa partie GPS (balise 0x8825)
+    stored = add_file(people["owner"], project, name, original)
+    cleaned = content.file_path(project, stored.uuid).read_bytes()
+    assert stored.mime_type == REAL_IMAGES[name]
+    assert b"Appareil Test" not in cleaned and b"\x88\x25" not in cleaned
+    assert content.clean_file(cleaned, stored.mime_type) == cleaned  # structure intacte, plus rien à retirer
+
+
+@pytest.mark.parametrize("name", [*REAL_IMAGES, "pdf"])
+def test_truncated_file_refused_without_error_500(client, people, project, name):
+    data = PDF if name == "pdf" else (FIXTURES / name).read_bytes()
+    log_in(client, people["owner"])
+    response = client.post("/projets/drone/fichiers", data={"file": (io.BytesIO(data[:len(data) // 2]), name)})
+    assert response.status_code == 400 and "Fichier abîmé ou incomplet" in response.text
+    assert File.query.count() == 0
+
+
+def test_corrupted_png_refused(people, project):
+    data = (FIXTURES / "gps.png").read_bytes()
+    corrupted = data[:8] + b"\xff\xff\xff\xff" + data[12:]  # taille du premier bloc impossible
+    with pytest.raises(ProjectError, match="abîmé"):
+        add_file(people["owner"], project, "gps.png", corrupted)
+
+
+def test_fake_png_file_refused(client, people, project):
+    log_in(client, people["owner"])
+    fake = (FIXTURES / "faux.png").read_bytes()
+    response = client.post("/projets/drone/fichiers", data={"file": (io.BytesIO(fake), "faux.png")})
+    assert response.status_code == 400 and "Type de fichier refusé" in response.text
     assert File.query.count() == 0

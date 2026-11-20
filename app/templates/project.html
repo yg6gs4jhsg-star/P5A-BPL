@@ -6,8 +6,8 @@
 <h1>{{ project.title }}</h1>
 {% if readable %}<p>Statut : {{ project.status|label }}</p>{% endif %}
 <p>Encadrant : {{ project.supervisor.name if project.supervisor else "pas encore attribué" }}</p>
-{% if project.client_name or project.client_logo %}
-<p>Client : {% if project.client_logo %}<img class="logo" src="/fichiers/{{ project.client_logo.uuid }}" alt="Logo">{% endif %} {{ project.client_name or "" }}</p>
+{% if client.name or client.logo %}
+<p>Client : {% if client.logo %}<img class="logo" src="/fichiers/{{ client.logo }}" alt="Logo">{% endif %} {{ client.name }}</p>
 {% endif %}
 
 {% if error %}<p class="alerte">{{ error }}</p>{% endif %}
