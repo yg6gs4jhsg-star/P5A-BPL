@@ -8,11 +8,12 @@ from sqlalchemy import func
 
 from app.accounts.roles import STAFF_DOMAIN, STUDENT_DOMAIN, domain_of, normalize_email
 from app.authorization.rules import can
-from app.models import Account, File, HistoryEvent, Invitation, Member, Project, db, utcnow
+from app.models import Account, File, HistoryEvent, Invitation, Member, Project, Theme, db, utcnow
 from app.projects import content
 
 # --- Constantes ---
 TITLE_MAX = 200
+THEME_MAX = 100
 DEFAULT_SLUG = "projet"
 # Action -> (droit vérifié par can, statuts de départ, statut d'arrivée). Voir § 3 du cahier des charges.
 TRANSITIONS = {
@@ -44,10 +45,14 @@ def require_supervisor_role(account):
         raise ProjectError("L'encadrant choisi n'est pas un enseignant.")
 
 
+def plain(text):
+    """Texte sans accents ni majuscules."""
+    return unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode().lower()
+
+
 def unique_slug(title):
     """Adresse lisible sans accents, numérotée si elle existe déjà (corbeille comprise)."""
-    ascii_title = unicodedata.normalize("NFKD", title).encode("ascii", "ignore").decode()
-    base = re.sub(r"[^a-z0-9]+", "-", ascii_title.lower()).strip("-")
+    base = re.sub(r"[^a-z0-9]+", "-", plain(title)).strip("-")
     if not any(char.isalpha() for char in base):
         base = DEFAULT_SLUG
     slug, number = base, 1
@@ -194,20 +199,34 @@ def transfer_ownership(user, project, target):
         new_owner.role = "owner"
 
 
-def save_draft(user, project, texts, versions, client_name="", client_logo=None):
-    """Enregistre le brouillon et le client, sauf si quelqu'un a modifié les textes depuis l'ouverture."""
+def theme_named(name):
+    """Le thème de ce nom (accents, majuscules et espaces en trop ignorés), créé actif s'il n'existe pas."""
+    name = " ".join(name.split())
+    normalized = plain(name)
+    if not normalized or len(name) > THEME_MAX:
+        raise ProjectError(f"Le thème proposé doit contenir des lettres et faire au plus {THEME_MAX} caractères.")
+    return Theme.query.filter_by(normalized_name=normalized).first() or Theme(name=name, normalized_name=normalized)
+
+
+def save_draft(user, project, texts, versions, client_name="", client_logo=None, theme_ids=(), new_theme=""):
+    """Enregistre le brouillon, le client et les thèmes, sauf si quelqu'un a modifié les textes depuis l'ouverture."""
     require(user, "edit_draft", project)
     client_name = (client_name or "").strip()
     if len(client_name) > TITLE_MAX:
         raise ProjectError(f"Le nom du client fait au plus {TITLE_MAX} caractères.")
     if client_logo and (client_logo.project_id != project.id or not client_logo.mime_type.startswith("image/")):
         raise ProjectError("Le logo doit être une image envoyée sur ce projet.")
+    # Thèmes cochables : les actifs, et ceux que le projet a déjà.
+    themes = [t for t in Theme.query.filter(Theme.id.in_(theme_ids)) if t.active or t in project.themes]
+    if new_theme.strip():
+        themes.append(theme_named(new_theme))
     for section in content.SECTIONS:
         if content.fingerprint(content.read_section(project, "draft", section)) != versions.get(section):
             raise ProjectError("Le projet a changé depuis votre ouverture : copiez votre texte, "
                                "rechargez la page et recommencez.")
     with transaction():
         project.updated_at = utcnow()
+        project.themes = list(dict.fromkeys(themes))  # sans doublon si le thème proposé était déjà coché
         content.write_client(project, client_name, client_logo.uuid if client_logo else None)
         for section in content.SECTIONS:
             content.write_section(project, section, texts.get(section, ""))

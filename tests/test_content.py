@@ -6,10 +6,10 @@ from pathlib import Path
 import pytest
 
 from app import create_app
-from app.models import File, db
+from app.models import File, Theme, db
 from app.projects import content
 from app.projects.service import (
-    ProjectError, add_file, change_status, create_project, delete_file, invite, save_draft,
+    ProjectError, add_file, change_status, create_project, delete_file, invite, plain, save_draft,
 )
 from tests.conftest import log_in, person
 
@@ -456,3 +456,60 @@ def test_editor_has_toolbar_and_htmx(client, people, project):
 def test_htmx_only_on_editor(client, people, project):
     log_in(client, people["owner"])
     assert "<script" not in client.get("/projets/drone").text
+
+
+# Étape 6c : thèmes (EDI-06).
+def themes_of(project):
+    return [theme.name for theme in project.themes]
+
+
+@pytest.fixture
+def themes(app):
+    found = [Theme(name=name, normalized_name=plain(name)) for name in ("Robotique", "Énergie", "Santé")]
+    found[2].active = False
+    db.session.add_all(found)
+    db.session.commit()
+    return found
+
+
+def test_check_one_or_several_existing_themes(people, project, themes):
+    save_draft(people["collabo"], project, {}, versions(project), theme_ids=[themes[0].id])
+    assert themes_of(project) == ["Robotique"]
+    save_draft(people["collabo"], project, {}, versions(project), theme_ids=[themes[0].id, themes[1].id])
+    assert themes_of(project) == ["Énergie", "Robotique"]
+
+
+def test_propose_new_theme_created_active_and_checked(people, project, themes):
+    save_draft(people["owner"], project, {}, versions(project), theme_ids=[themes[0].id], new_theme="  Aéro   spatial ")
+    created = Theme.query.filter_by(normalized_name="aero spatial").one()
+    assert created.name == "Aéro spatial" and created.active
+    assert themes_of(project) == ["Aéro spatial", "Robotique"]
+
+
+@pytest.mark.parametrize("proposed", ["energie", "  ÉNERGIE ", "Energie"])
+def test_duplicate_theme_reused(people, project, themes, proposed):
+    save_draft(people["owner"], project, {}, versions(project), theme_ids=[themes[1].id], new_theme=proposed)
+    assert Theme.query.count() == 3 and themes_of(project) == ["Énergie"]
+
+
+def test_inactive_theme_not_offered(client, people, project, themes):
+    log_in(client, people["owner"])
+    page = client.get("/projets/drone/editer").text
+    assert "Robotique" in page and "Énergie" in page and "Santé" not in page
+    save_draft(people["owner"], project, {}, versions(project), theme_ids=[themes[2].id])
+    assert themes_of(project) == []  # un thème inactif ne peut pas être coché
+
+
+def test_themes_refused_outside_draft(people, project, themes):
+    change_status(people["owner"], project, "submit")
+    with pytest.raises(ProjectError, match="droit"):
+        save_draft(people["owner"], project, {}, versions(project), new_theme="Nouveau")
+    assert Theme.query.count() == 3
+
+
+def test_themes_from_editor_shown_on_project_page(client, people, project, themes):
+    log_in(client, people["owner"])
+    data = {"theme_ids": [themes[0].id], "new_theme": "Aéronautique",
+            **{f"version_{s}": v for s, v in versions(project).items()}}
+    client.post("/projets/drone/editer", data=data)
+    assert "Thèmes : Aéronautique, Robotique" in client.get("/projets/drone").text

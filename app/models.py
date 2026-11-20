@@ -53,7 +53,6 @@ class Project(db.Model):
     uuid = db.Column(db.String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4()))
     slug = db.Column(db.String(220), unique=True, nullable=False)  # adresse lisible
     title = db.Column(db.String(200), nullable=False)
-    theme = db.Column(db.String(100))
     status = db.Column(choice(STATUSES, "status"), nullable=False, default="brouillon")
     supervisor_id = db.Column(db.ForeignKey("account.id", ondelete="SET NULL"))
     is_featured = db.Column(db.Boolean, nullable=False, default=False)
@@ -63,6 +62,7 @@ class Project(db.Model):
     updated_at = db.Column(db.DateTime, nullable=False, default=utcnow, onupdate=utcnow)
 
     supervisor = db.relationship("Account")
+    themes = db.relationship("Theme", secondary="project_theme", order_by="Theme.normalized_name")
     members = db.relationship("Member", back_populates="project", cascade="all, delete-orphan")
     invitations = db.relationship("Invitation", back_populates="project", cascade="all, delete-orphan")
     files = db.relationship("File", back_populates="project", cascade="all, delete-orphan", order_by="File.id")
@@ -70,6 +70,22 @@ class Project(db.Model):
         "HistoryEvent", back_populates="project", cascade="all, delete-orphan",
         order_by="(HistoryEvent.created_at, HistoryEvent.id)",
     )
+
+
+class Theme(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    # Nom sans accents, majuscules ni espaces en trop : deux thèmes ne peuvent pas avoir le même (EDI-06).
+    normalized_name = db.Column(db.String(100), unique=True, nullable=False)
+    active = db.Column(db.Boolean, nullable=False, default=True)
+
+
+# Liaison : un projet a plusieurs thèmes, un thème sert à plusieurs projets.
+project_theme = db.Table(
+    "project_theme",
+    db.Column("project_id", db.ForeignKey("project.id", ondelete="CASCADE"), primary_key=True),
+    db.Column("theme_id", db.ForeignKey("theme.id", ondelete="CASCADE"), primary_key=True),
+)
 
 
 class Member(db.Model):

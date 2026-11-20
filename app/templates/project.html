@@ -6,6 +6,7 @@
 <h1>{{ project.title }}</h1>
 {% if readable %}<p>Statut : {{ project.status|label }}</p>{% endif %}
 <p>Encadrant : {{ project.supervisor.name if project.supervisor else "pas encore attribué" }}</p>
+{% if project.themes %}<p>Thèmes : {{ project.themes|map(attribute="name")|join(", ") }}</p>{% endif %}
 {% if client.name or client.logo %}
 <p>Client : {% if client.logo %}<img class="logo" src="/fichiers/{{ client.logo }}" alt="Logo">{% endif %} {{ client.name }}</p>
 {% endif %}

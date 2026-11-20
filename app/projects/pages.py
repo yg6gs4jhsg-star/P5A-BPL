@@ -5,7 +5,7 @@ from flask_wtf.csrf import CSRFError
 from app.accounts.auth import message
 from app.accounts.roles import is_admin
 from app.authorization.rules import can
-from app.models import STATUS_LABELS, Account, File, Invitation, Member, Project, db
+from app.models import STATUS_LABELS, Account, File, Invitation, Member, Project, Theme, db
 from app.projects import bp
 from app.projects import content, service
 from app.projects.service import TRANSITIONS, ProjectError, create_project
@@ -186,7 +186,7 @@ def editable_project(slug):
     return project
 
 
-def show_editor(project, texts=None, versions=None, client=None, preview=False, error=None, status=200):
+def show_editor(project, texts=None, versions=None, client=None, checked=None, preview=False, error=None, status=200):
     """Éditeur ; sans textes donnés, ceux du disque et leurs empreintes d'ouverture."""
     if texts is None:
         texts = {s: content.read_section(project, "draft", s) for s in content.SECTIONS}
@@ -195,6 +195,8 @@ def show_editor(project, texts=None, versions=None, client=None, preview=False, 
         "editor.html", project=project, sections=content.SECTIONS, texts=texts, versions=versions,
         client=client or content.read_client(project, "draft"),
         images=[file for file in project.files if file.mime_type.startswith("image/")],
+        themes=sorted({*Theme.query.filter_by(active=True), *project.themes}, key=lambda theme: theme.normalized_name),
+        checked=checked if checked is not None else [theme.id for theme in project.themes],
         previews={s: content.render(t) for s, t in texts.items()} if preview else None, error=error,
     ), status
 
@@ -208,13 +210,15 @@ def edit_draft(slug):
     texts = {s: request.form.get(s, "").replace("\r\n", "\n") for s in content.SECTIONS}
     versions = {s: request.form.get(f"version_{s}") for s in content.SECTIONS}
     client = {"name": request.form.get("client_name", ""), "logo": request.form.get("client_logo") or None}
+    checked = request.form.getlist("theme_ids", type=int)
     if request.form.get("preview"):
-        return show_editor(project, texts, versions, client, preview=True)
+        return show_editor(project, texts, versions, client, checked, preview=True)
     try:
         logo = File.query.filter_by(uuid=client["logo"]).first() if client["logo"] else None
-        service.save_draft(current_user, project, texts, versions, client["name"], logo)
+        service.save_draft(current_user, project, texts, versions, client["name"], logo, checked,
+                           request.form.get("new_theme", ""))
     except ProjectError as refusal:
-        return show_editor(project, texts, versions, client, error=str(refusal), status=409)
+        return show_editor(project, texts, versions, client, checked, error=str(refusal), status=409)
     flash("Brouillon enregistré.")
     return redirect(url_for("projects.edit_draft", slug=slug))
 
