@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Mon espace · BluePrintLab{% endblock %}
+{% block content %}
+<h1>Mon espace</h1>
+<p>{{ current_user.name }} · {{ current_user.base_role|label }}{% if admin %} · admin{% endif %}</p>
+
+{% for role, projects in projects_by_role.items() if projects %}
+<h2>{{ role|label }}</h2>
+<ul>
+  {% for project in projects %}
+  <li><a href="{{ url_for('projects.project_page', slug=project.slug) }}">{{ project.title }}</a> : {{ project.status|label }}</li>
+  {% endfor %}
+</ul>
+{% else %}
+<p>Aucun projet pour l'instant.</p>
+{% endfor %}
+
+{% if can_create %}
+<h2>Créer un projet</h2>
+{% if error %}<p class="alerte">{{ error }}</p>{% endif %}
+<form method="post">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <p><label>Titre<br><input name="title" value="{{ title }}" maxlength="200" required></label></p>
+  <p><label>Encadrant (facultatif)<br>
+    <select name="supervisor_id">
+      <option value="">Pas encore choisi</option>
+      {% for supervisor in supervisors %}<option value="{{ supervisor.id }}">{{ supervisor.name }}</option>{% endfor %}
+    </select></label></p>
+  <p><button>Créer le projet</button></p>
+</form>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,10 @@
+.env
+*.db
+__pycache__/
+.venv/
+.DS_Store
+.pytest_cache/
+instance/
+content/*
+!content/.gitkeep
+apercu/
