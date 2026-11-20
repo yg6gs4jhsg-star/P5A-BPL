@@ -67,6 +67,11 @@ def home():
     return render_template("home.html")
 
 
+def offered_themes(current=()):
+    """Thèmes proposés en cases à cocher : les actifs, et ceux que le projet a déjà."""
+    return sorted({*Theme.query.filter_by(active=True), *current}, key=lambda theme: theme.normalized_name)
+
+
 def my_projects(user):
     """Mes projets hors corbeille, classés par rôle."""
     by_role = {role: [] for role in ROLE_ORDER}
@@ -80,11 +85,13 @@ def my_projects(user):
 @login_required
 def my_space():
     title, error, status = "", None, 200
+    checked = request.form.getlist("theme_ids", type=int)
     if request.method == "POST":
         title = request.form.get("title", "")
         supervisor_id = request.form.get("supervisor_id", type=int)
         try:
-            project = create_project(current_user, title, db.session.get(Account, supervisor_id) if supervisor_id else None)
+            supervisor = db.session.get(Account, supervisor_id) if supervisor_id else None
+            project = create_project(current_user, title, supervisor, checked, request.form.get("new_theme", ""))
             return redirect(url_for("projects.project_page", slug=project.slug))
         except ProjectError as refusal:
             error, status = str(refusal), 400
@@ -94,7 +101,7 @@ def my_space():
         projects_by_role=my_projects(current_user),
         can_create=can(current_user, "create_project"),
         supervisors=Account.query.filter_by(base_role="encadrant").order_by(Account.name),
-        title=title, error=error,
+        themes=offered_themes(), checked=checked, title=title, error=error,
     ), status
 
 
@@ -195,7 +202,7 @@ def show_editor(project, texts=None, versions=None, client=None, checked=None, p
         "editor.html", project=project, sections=content.SECTIONS, texts=texts, versions=versions,
         client=client or content.read_client(project, "draft"),
         images=[file for file in project.files if file.mime_type.startswith("image/")],
-        themes=sorted({*Theme.query.filter_by(active=True), *project.themes}, key=lambda theme: theme.normalized_name),
+        themes=offered_themes(project.themes),
         checked=checked if checked is not None else [theme.id for theme in project.themes],
         previews={s: content.render(t) for s, t in texts.items()} if preview else None, error=error,
     ), status

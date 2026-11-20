@@ -73,14 +73,15 @@ def transaction():
         raise
 
 
-def create_project(user, title, supervisor=None):
+def create_project(user, title, supervisor=None, theme_ids=(), new_theme=""):
     require(user, "create_project")
     title = (title or "").strip()
     if not title or len(title) > TITLE_MAX:
         raise ProjectError(f"Le titre est obligatoire et fait au plus {TITLE_MAX} caractères.")
     if supervisor is not None:
         require_supervisor_role(supervisor)
-    project = Project(title=title, slug=unique_slug(title), supervisor=supervisor)
+    themes = chosen_themes([], theme_ids, new_theme)
+    project = Project(title=title, slug=unique_slug(title), supervisor=supervisor, themes=themes)
     with transaction():
         db.session.add_all([
             project,
@@ -208,6 +209,14 @@ def theme_named(name):
     return Theme.query.filter_by(normalized_name=normalized).first() or Theme(name=name, normalized_name=normalized)
 
 
+def chosen_themes(current, theme_ids, new_theme):
+    """Thèmes cochés (actifs, ou déjà ceux du projet) et thème proposé, sans doublon. Rien n'est enregistré ici."""
+    themes = [theme for theme in Theme.query.filter(Theme.id.in_(theme_ids)) if theme.active or theme in current]
+    if new_theme.strip():
+        themes.append(theme_named(new_theme))
+    return list(dict.fromkeys(themes))  # le thème proposé était peut-être déjà coché
+
+
 def save_draft(user, project, texts, versions, client_name="", client_logo=None, theme_ids=(), new_theme=""):
     """Enregistre le brouillon, le client et les thèmes, sauf si quelqu'un a modifié les textes depuis l'ouverture."""
     require(user, "edit_draft", project)
@@ -216,17 +225,14 @@ def save_draft(user, project, texts, versions, client_name="", client_logo=None,
         raise ProjectError(f"Le nom du client fait au plus {TITLE_MAX} caractères.")
     if client_logo and (client_logo.project_id != project.id or not client_logo.mime_type.startswith("image/")):
         raise ProjectError("Le logo doit être une image envoyée sur ce projet.")
-    # Thèmes cochables : les actifs, et ceux que le projet a déjà.
-    themes = [t for t in Theme.query.filter(Theme.id.in_(theme_ids)) if t.active or t in project.themes]
-    if new_theme.strip():
-        themes.append(theme_named(new_theme))
+    themes = chosen_themes(project.themes, theme_ids, new_theme)
     for section in content.SECTIONS:
         if content.fingerprint(content.read_section(project, "draft", section)) != versions.get(section):
             raise ProjectError("Le projet a changé depuis votre ouverture : copiez votre texte, "
                                "rechargez la page et recommencez.")
     with transaction():
         project.updated_at = utcnow()
-        project.themes = list(dict.fromkeys(themes))  # sans doublon si le thème proposé était déjà coché
+        project.themes = themes
         content.write_client(project, client_name, client_logo.uuid if client_logo else None)
         for section in content.SECTIONS:
             content.write_section(project, section, texts.get(section, ""))

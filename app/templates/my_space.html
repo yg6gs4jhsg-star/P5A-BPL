@@ -26,6 +26,8 @@
       <option value="">Pas encore choisi</option>
       {% for supervisor in supervisors %}<option value="{{ supervisor.id }}">{{ supervisor.name }}</option>{% endfor %}
     </select></label></p>
+  <p>Thèmes (facultatif)</p>
+  {% include "_themes.html" %}
   <p><button>Créer le projet</button></p>
 </form>
 {% endif %}

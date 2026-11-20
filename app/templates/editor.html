@@ -36,12 +36,7 @@
       {% endfor %}
     </select></label></p>
   <h2>Thèmes</h2>
-  <p class="themes">
-    {% for theme in themes %}
-    <label><input type="checkbox" name="theme_ids" value="{{ theme.id }}"{% if theme.id in checked %} checked{% endif %}> {{ theme.name }}</label>
-    {% endfor %}
-  </p>
-  <p><label>Proposer un thème<br><input name="new_theme" maxlength="100"></label></p>
+  {% include "_themes.html" %}
   <p><button name="preview" value="1">Aperçu</button> <button>Enregistrer</button></p>
 </form>
 

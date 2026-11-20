@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from app import create_app
-from app.models import File, Theme, db
+from app.models import File, Project, Theme, db
 from app.projects import content
 from app.projects.service import (
     ProjectError, add_file, change_status, create_project, delete_file, invite, plain, save_draft,
@@ -513,3 +513,41 @@ def test_themes_from_editor_shown_on_project_page(client, people, project, theme
             **{f"version_{s}": v for s, v in versions(project).items()}}
     client.post("/projets/drone/editer", data=data)
     assert "Thèmes : Aéronautique, Robotique" in client.get("/projets/drone").text
+
+
+# 6c bis : thèmes à la création du projet (PRJ-01).
+def test_create_project_with_existing_theme(people, themes):
+    assert themes_of(create_project(people["owner"], "Robot", theme_ids=[themes[0].id])) == ["Robotique"]
+
+
+def test_create_project_with_new_theme(people, themes):
+    project = create_project(people["owner"], "Robot", theme_ids=[themes[0].id], new_theme="Aéronautique")
+    assert themes_of(project) == ["Aéronautique", "Robotique"] and Theme.query.count() == 4
+
+
+@pytest.mark.parametrize("proposed", ["energie", " ÉNERGIE "])
+def test_create_project_with_duplicate_theme_reuses_it(people, themes, proposed):
+    assert themes_of(create_project(people["owner"], "Robot", new_theme=proposed)) == ["Énergie"]
+    assert Theme.query.count() == 3
+
+
+def test_create_project_without_theme(people, themes):
+    assert themes_of(create_project(people["owner"], "Robot")) == []
+
+
+@pytest.mark.parametrize("who, title", [("owner", ""), ("encadrant", "Robot")])
+def test_refused_creation_creates_no_theme(people, themes, who, title):
+    with pytest.raises(ProjectError):
+        create_project(people[who], title, new_theme="Nouveau thème")
+    assert Theme.query.count() == 3 and Project.query.count() == 0
+
+
+def test_create_form_offers_themes_and_keeps_them_on_error(client, people, themes):
+    log_in(client, people["exterieur"])
+    page = client.get("/mon-espace").text
+    assert "Robotique" in page and "Énergie" in page and "Santé" not in page and 'name="new_theme"' in page
+    response = client.post("/mon-espace", data={"title": "", "theme_ids": [themes[1].id]})
+    assert response.status_code == 400 and f'value="{themes[1].id}" checked' in response.text
+    response = client.post("/mon-espace", data={"title": "Robot", "theme_ids": [themes[1].id], "new_theme": "IA"})
+    assert response.location == "/projets/robot"
+    assert themes_of(Project.query.filter_by(slug="robot").one()) == ["Énergie", "IA"]

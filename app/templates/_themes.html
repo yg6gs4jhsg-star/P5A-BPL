@@ -1,0 +1,7 @@
+{# Cases des thèmes et proposition d'un nouveau thème : création du projet et éditeur du brouillon. #}
+<p class="themes">
+  {% for theme in themes %}
+  <label><input type="checkbox" name="theme_ids" value="{{ theme.id }}"{% if theme.id in checked %} checked{% endif %}> {{ theme.name }}</label>
+  {% endfor %}
+</p>
+<p><label>Proposer un thème<br><input name="new_theme" maxlength="100"></label></p>
