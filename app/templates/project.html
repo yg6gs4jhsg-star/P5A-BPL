@@ -52,7 +52,7 @@
 {% if allowed.submit %}{{ action_form(project, "submit", "Soumettre à la relecture") }}{% endif %}
 {% if allowed.request_changes %}
   {% call action_form(project, "request_changes", "Demander des modifications") %}
-    <label>Message (facultatif) <input name="message"></label>
+    <label>Message pour l'équipe <input name="message" required></label>
   {% endcall %}
 {% endif %}
 {% if allowed.publish %}{{ action_form(project, "publish", "Republier" if project.status == "retire" else "Valider et publier") }}{% endif %}
@@ -78,6 +78,8 @@
     <label><input type="checkbox" name="confirm" required> Je confirme la suppression (corbeille de 30 jours)</label>
   {% endcall %}
 {% endif %}
+{% if allowed.feature %}{{ action_form(project, "feature", "Mettre en avant") }}{% endif %}
+{% if allowed.unfeature %}{{ action_form(project, "unfeature", "Retirer des phares") }}{% endif %}
 {% if allowed.restore %}{{ action_form(project, "restore", "Restaurer") }}{% endif %}
 {% endif %}
 

@@ -98,6 +98,9 @@ def change_status(user, project, action, message=None):
     require(user, right, project)
     if action == "submit" and project.supervisor_id is None:
         raise ProjectError("Aucun encadrant n'est attribué : attendez son attribution pour soumettre.")
+    message = (message or "").strip()
+    if action == "request_changes" and not message:
+        raise ProjectError("Écrivez un message pour dire à l'équipe quoi corriger.")
     values = {"status": to_status, "updated_at": utcnow()}
     if to_status == "publie":
         values["first_published_at"] = func.coalesce(Project.first_published_at, utcnow())
@@ -111,6 +114,13 @@ def change_status(user, project, action, message=None):
         if action == "publish":
             content.copy_draft_to_published(project)
     db.session.refresh(project)
+
+
+def set_featured(user, project, featured):
+    """Met le projet parmi les projets phares de l'accueil, ou l'en retire."""
+    require(user, "feature_project", project)
+    with transaction():
+        project.is_featured = featured
 
 
 def assign_supervisor(user, project, supervisor):

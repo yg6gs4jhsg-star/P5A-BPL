@@ -32,7 +32,10 @@ ACTIONS = {
     "remove_member": ("manage_members", "Membre retiré."),
     "cancel_invitation": ("manage_members", "Invitation annulée."),
     "transfer_ownership": ("transfer_ownership", "Rôle d'Owner transféré."),
+    "feature": ("feature_project", "Projet mis en avant."),
+    "unfeature": ("feature_project", "Projet retiré des phares."),
 }
+REVIEW_STATUSES = ("en_relecture", "reedition_demandee")  # badge « À relire »
 
 
 @bp.app_template_filter("label")
@@ -94,10 +97,14 @@ def my_space():
             return redirect(url_for("projects.project_page", slug=project.slug))
         except ProjectError as refusal:
             error, status = str(refusal), 400
+    projects_by_role = my_projects(current_user)
+    team = projects_by_role["owner"] + projects_by_role["collabo"]
     return render_template(
         "my_space.html",
         admin=is_admin(current_user.email),
-        projects_by_role=my_projects(current_user),
+        projects_by_role=projects_by_role,
+        to_do=sum(project.status == "brouillon" for project in team),
+        to_review=sum(project.status in REVIEW_STATUSES for project in projects_by_role["encadrant"]),
         can_create=can(current_user, "create_project"),
         supervisors=Account.query.filter_by(base_role="encadrant").order_by(Account.name),
         themes=offered_themes(), checked=checked, title=title, error=error,
@@ -118,6 +125,8 @@ def allowed_actions(project):
     allowed = {action: can(current_user, right, project) for action, (right, _) in ACTIONS.items()}
     allowed["delete"] &= project.deleted_at is None
     allowed["restore"] &= project.deleted_at is not None
+    allowed["feature"] &= not project.is_featured
+    allowed["unfeature"] &= project.is_featured
     return allowed
 
 
@@ -157,6 +166,8 @@ def run_action(action, user, project, form):
         return service.delete_project(user, project)
     if action == "restore":
         return service.restore_project(user, project)
+    if action in ("feature", "unfeature"):
+        return service.set_featured(user, project, action == "feature")
     if action == "assign_supervisor":
         return service.assign_supervisor(user, project, from_form(Account, "account_id"))
     if action == "invite":

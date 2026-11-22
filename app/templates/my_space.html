@@ -3,6 +3,8 @@
 {% block content %}
 <h1>Mon espace</h1>
 <p>{{ current_user.name }} · {{ current_user.base_role|label }}{% if admin %} · admin{% endif %}</p>
+{% if to_do %}<p class="badge">À faire : {{ to_do }}</p>{% endif %}
+{% if to_review %}<p class="badge">À relire : {{ to_review }}</p>{% endif %}
 
 {% for role, projects in projects_by_role.items() if projects %}
 <h2>{{ role|label }}</h2>
