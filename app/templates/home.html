@@ -1,5 +1,15 @@
 {% extends "base.html" %}
+{% block title %}BluePrintLab · Projets étudiants de l'EPF Montpellier{% endblock %}
 {% block content %}
 <h1>BluePrintLab</h1>
 <p>Les projets des étudiants de l'EPF Montpellier, rédigés en équipe et validés par leur encadrant.</p>
+{% if headline %}
+<h2>Projet à la une</h2>
+<div class="cartes">{% with card=headline %}{% include "_card.html" %}{% endwith %}</div>
+{% endif %}
+{% if featured %}
+<h2>Projets phares</h2>
+<div class="cartes">{% for card in featured %}{% include "_card.html" %}{% endfor %}</div>
+{% endif %}
+<p><a href="{{ url_for('projects.project_list') }}">Voir tous les projets</a></p>
 {% endblock %}

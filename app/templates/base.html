@@ -4,11 +4,21 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}BluePrintLab{% endblock %}</title>
+  <meta name="description" content="{% block description %}Les projets des étudiants de l'EPF Montpellier, rédigés en équipe et validés par leur encadrant.{% endblock %}">
+  {% block robots %}{% endblock %}
+  <link rel="canonical" href="{{ canonical }}">
+  <meta property="og:title" content="{{ self.title() }}">
+  <meta property="og:description" content="{{ self.description() }}">
+  <meta property="og:url" content="{{ canonical }}">
+  <meta property="og:type" content="{% block og_type %}website{% endblock %}">
+  {% block og_image %}{% endblock %}
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
   <header>
     <a class="site" href="{{ url_for('projects.home') }}">BluePrintLab</a>
+    <a href="{{ url_for('projects.project_list') }}">Projets</a>
+    <a href="{{ url_for('projects.information') }}">Informations</a>
     <a href="{{ url_for('projects.my_space') }}">Mon espace</a>
     {% if current_user.is_authenticated %}
       <form method="post" action="{{ url_for('accounts.logout') }}">

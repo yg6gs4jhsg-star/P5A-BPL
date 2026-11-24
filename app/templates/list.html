@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Projets · BluePrintLab{% endblock %}
+{% block description %}Tous les projets étudiants publiés de l'EPF Montpellier, à filtrer par thème ou par mot.{% endblock %}
+{% block content %}
+<h1>Projets</h1>
+<form method="get">
+  <label>Rechercher <input type="search" name="q" value="{{ words }}"></label>
+  <label>Thème
+    <select name="theme">
+      <option value="">Tous les thèmes</option>
+      {% for theme in themes %}<option value="{{ theme.id }}"{% if theme.id == theme_id %} selected{% endif %}>{{ theme.name }}</option>{% endfor %}
+    </select></label>
+  <button>Filtrer</button>
+</form>
+<div class="cartes">
+  {% for card in cards %}{% include "_card.html" %}{% else %}<p>Aucun projet trouvé.</p>{% endfor %}
+</div>
+{% endblock %}

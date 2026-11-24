@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Modifier · {{ project.title }} · BluePrintLab{% endblock %}
+{% block robots %}<meta name="robots" content="noindex">{% endblock %}
 {% block content %}
 <p><a href="{{ url_for('projects.project_page', slug=project.slug) }}">← Retour au projet</a></p>
 <h1>{{ project.title }} : brouillon</h1>
@@ -35,6 +36,8 @@
       <option value="{{ file.uuid }}"{% if file.uuid == client.logo %} selected{% endif %}>{{ file.original_name }}</option>
       {% endfor %}
     </select></label></p>
+  <h2>Thèmes</h2>
+  {% include "_themes.html" %}
   <p><button name="preview" value="1">Aperçu</button> <button>Enregistrer</button></p>
 </form>
 

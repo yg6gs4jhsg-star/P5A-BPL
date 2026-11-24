@@ -4,14 +4,14 @@ Ce fichier sert à lire la matrice sans ouvrir le .docx. Le cahier des charges r
 
 ## Qui est qui
 - **Visiteur** : personne non connectée.
-- **Client, Collabo, Owner** : rôle de la personne dans CE projet (table Member).
+- **Client, Collaborateur, Owner** : rôle de la personne dans CE projet (table Member).
 - **Encadrant** : l'encadrant attribué à CE projet (`Project.supervisor`), pas n'importe quel encadrant.
 - **Admin** : adresse dans la liste blanche (`is_admin`). Il s'ajoute au rôle de base.
 
 ## Matrice
 ✓ = autorisé · – = non autorisé
 
-| Action | Visiteur | Client | Collabo | Owner | Encadrant | Admin |
+| Action | Visiteur | Client | Collaborateur | Owner | Encadrant | Admin |
 |---|---|---|---|---|---|---|
 | Consulter les projets publiés et la page d'infos | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | Partager un projet (LinkedIn, copie du lien) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |

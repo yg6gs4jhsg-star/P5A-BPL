@@ -1,8 +1,11 @@
 {% extends "base.html" %}
 {% block title %}Mon espace · BluePrintLab{% endblock %}
+{% block robots %}<meta name="robots" content="noindex">{% endblock %}
 {% block content %}
 <h1>Mon espace</h1>
 <p>{{ current_user.name }} · {{ current_user.base_role|label }}{% if admin %} · admin{% endif %}</p>
+{% if to_do %}<p class="badge">À faire : {{ to_do }}</p>{% endif %}
+{% if to_review %}<p class="badge">À relire : {{ to_review }}</p>{% endif %}
 
 {% for role, projects in projects_by_role.items() if projects %}
 <h2>{{ role|label }}</h2>
@@ -26,6 +29,8 @@
       <option value="">Pas encore choisi</option>
       {% for supervisor in supervisors %}<option value="{{ supervisor.id }}">{{ supervisor.name }}</option>{% endfor %}
     </select></label></p>
+  <p>Thèmes (facultatif)</p>
+  {% include "_themes.html" %}
   <p><button>Créer le projet</button></p>
 </form>
 {% endif %}

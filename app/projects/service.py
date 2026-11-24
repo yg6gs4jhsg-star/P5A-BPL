@@ -8,11 +8,12 @@ from sqlalchemy import func
 
 from app.accounts.roles import STAFF_DOMAIN, STUDENT_DOMAIN, domain_of, normalize_email
 from app.authorization.rules import can
-from app.models import Account, File, HistoryEvent, Invitation, Member, Project, db, utcnow
+from app.models import INVITATION_ROLES, Account, File, HistoryEvent, Invitation, Member, Project, Theme, db, utcnow
 from app.projects import content
 
 # --- Constantes ---
 TITLE_MAX = 200
+THEME_MAX = 100
 DEFAULT_SLUG = "projet"
 # Action -> (droit vérifié par can, statuts de départ, statut d'arrivée). Voir § 3 du cahier des charges.
 TRANSITIONS = {
@@ -24,9 +25,6 @@ TRANSITIONS = {
     "accept_reedition": ("answer_reedition", {"reedition_demandee"}, "brouillon"),
     "refuse_reedition": ("answer_reedition", {"reedition_demandee"}, "publie"),
 }
-
-
-INVITATION_ROLES = ("collabo", "client")
 EPF_DOMAINS = (STAFF_DOMAIN, STUDENT_DOMAIN)
 
 
@@ -44,10 +42,14 @@ def require_supervisor_role(account):
         raise ProjectError("L'encadrant choisi n'est pas un enseignant.")
 
 
+def plain(text):
+    """Texte sans accents ni majuscules."""
+    return unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode().lower()
+
+
 def unique_slug(title):
     """Adresse lisible sans accents, numérotée si elle existe déjà (corbeille comprise)."""
-    ascii_title = unicodedata.normalize("NFKD", title).encode("ascii", "ignore").decode()
-    base = re.sub(r"[^a-z0-9]+", "-", ascii_title.lower()).strip("-")
+    base = re.sub(r"[^a-z0-9]+", "-", plain(title)).strip("-")
     if not any(char.isalpha() for char in base):
         base = DEFAULT_SLUG
     slug, number = base, 1
@@ -68,14 +70,15 @@ def transaction():
         raise
 
 
-def create_project(user, title, supervisor=None):
+def create_project(user, title, supervisor=None, theme_ids=(), new_theme=""):
     require(user, "create_project")
     title = (title or "").strip()
     if not title or len(title) > TITLE_MAX:
         raise ProjectError(f"Le titre est obligatoire et fait au plus {TITLE_MAX} caractères.")
     if supervisor is not None:
         require_supervisor_role(supervisor)
-    project = Project(title=title, slug=unique_slug(title), supervisor=supervisor)
+    themes = chosen_themes([], theme_ids, new_theme)
+    project = Project(title=title, slug=unique_slug(title), supervisor=supervisor, themes=themes)
     with transaction():
         db.session.add_all([
             project,
@@ -95,6 +98,9 @@ def change_status(user, project, action, message=None):
     require(user, right, project)
     if action == "submit" and project.supervisor_id is None:
         raise ProjectError("Aucun encadrant n'est attribué : attendez son attribution pour soumettre.")
+    message = (message or "").strip()
+    if action == "request_changes" and not message:
+        raise ProjectError("Écrivez un message pour dire à l'équipe quoi corriger.")
     values = {"status": to_status, "updated_at": utcnow()}
     if to_status == "publie":
         values["first_published_at"] = func.coalesce(Project.first_published_at, utcnow())
@@ -108,6 +114,13 @@ def change_status(user, project, action, message=None):
         if action == "publish":
             content.copy_draft_to_published(project)
     db.session.refresh(project)
+
+
+def set_featured(user, project, featured):
+    """Met le projet parmi les projets phares de l'accueil, ou l'en retire."""
+    require(user, "feature_project", project)
+    with transaction():
+        project.is_featured = featured
 
 
 def assign_supervisor(user, project, supervisor):
@@ -140,7 +153,7 @@ def invite(user, project, email, role):
     """Compte existant : membre tout de suite. Sinon : invitation de 30 jours, acceptée à la première connexion."""
     require(user, "manage_members", project)
     if role not in INVITATION_ROLES:
-        raise ProjectError("Le rôle doit être Collabo ou Client.")
+        raise ProjectError("Le rôle doit être Collaborateur ou Client.")
     email = normalize_email(email)
     domain = domain_of(email)
     if domain not in EPF_DOMAINS:
@@ -148,7 +161,7 @@ def invite(user, project, email, role):
     account = Account.query.filter_by(email=email).first()
     is_student = account.base_role == "etudiant" if account else domain == STUDENT_DOMAIN
     if role == "collabo" and not is_student:
-        raise ProjectError("Un Collabo doit être un étudiant.")
+        raise ProjectError("Un Collaborateur doit être un étudiant.")
     if account and Member.query.filter_by(project_id=project.id, account_id=account.id).first():
         raise ProjectError("Cette personne fait déjà partie de l'équipe.")
     pending = Invitation.query.filter_by(project_id=project.id, email=email).first()
@@ -184,30 +197,48 @@ def cancel_invitation(user, project, invitation):
 
 
 def transfer_ownership(user, project, target):
-    """Le Collabo choisi devient Owner ; l'ancien Owner devient Collabo."""
+    """Le Collaborateur choisi devient Owner ; l'ancien Owner devient Collaborateur."""
     require(user, "transfer_ownership", project)
     new_owner = Member.query.filter_by(project_id=project.id, account_id=target.id, role="collabo").first()
     if new_owner is None:
-        raise ProjectError("Le nouvel Owner doit être un Collabo du projet.")
+        raise ProjectError("Le nouvel Owner doit être un Collaborateur du projet.")
     with transaction():
         Member.query.filter_by(project_id=project.id, role="owner").one().role = "collabo"
         new_owner.role = "owner"
 
 
-def save_draft(user, project, texts, versions, client_name="", client_logo=None):
-    """Enregistre le brouillon et le client, sauf si quelqu'un a modifié les textes depuis l'ouverture."""
+def theme_named(name):
+    """Le thème de ce nom (accents, majuscules et espaces en trop ignorés), créé actif s'il n'existe pas."""
+    name = " ".join(name.split())
+    normalized = plain(name)
+    if not normalized or len(name) > THEME_MAX:
+        raise ProjectError(f"Le thème proposé doit contenir des lettres et faire au plus {THEME_MAX} caractères.")
+    return Theme.query.filter_by(normalized_name=normalized).first() or Theme(name=name, normalized_name=normalized)
+
+
+def chosen_themes(current, theme_ids, new_theme):
+    """Thèmes cochés (actifs, ou déjà ceux du projet) et thème proposé, sans doublon. Rien n'est enregistré ici."""
+    themes = [theme for theme in Theme.query.filter(Theme.id.in_(theme_ids)) if theme.active or theme in current]
+    if new_theme.strip():
+        themes.append(theme_named(new_theme))
+    return list(dict.fromkeys(themes))  # le thème proposé était peut-être déjà coché
+
+
+def save_draft(user, project, texts, versions, client_name="", client_logo=None, theme_ids=(), new_theme=""):
+    """Enregistre le brouillon, le client et les thèmes, sauf si quelqu'un a modifié les textes depuis l'ouverture."""
     require(user, "edit_draft", project)
     client_name = (client_name or "").strip()
     if len(client_name) > TITLE_MAX:
         raise ProjectError(f"Le nom du client fait au plus {TITLE_MAX} caractères.")
     if client_logo and (client_logo.project_id != project.id or not client_logo.mime_type.startswith("image/")):
         raise ProjectError("Le logo doit être une image envoyée sur ce projet.")
-    for section in content.SECTIONS:
-        if content.fingerprint(content.read_section(project, "draft", section)) != versions.get(section):
-            raise ProjectError("Le projet a changé depuis votre ouverture : copiez votre texte, "
-                               "rechargez la page et recommencez.")
+    themes = chosen_themes(project.themes, theme_ids, new_theme)
+    if any(content.fingerprint(content.read_section(project, "draft", s)) != versions.get(s) for s in content.SECTIONS):
+        raise ProjectError("Le projet a changé depuis votre ouverture : copiez votre texte, "
+                           "rechargez la page et recommencez.")
     with transaction():
         project.updated_at = utcnow()
+        project.themes = themes
         content.write_client(project, client_name, client_logo.uuid if client_logo else None)
         for section in content.SECTIONS:
             content.write_section(project, section, texts.get(section, ""))

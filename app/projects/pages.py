@@ -1,22 +1,27 @@
-from flask import abort, flash, redirect, render_template, request, send_file, url_for
+from datetime import timezone
+from urllib.parse import quote
+from zoneinfo import ZoneInfo
+
+from flask import abort, current_app, flash, redirect, render_template, request, send_file, url_for
 from flask_login import current_user, login_required
 from flask_wtf.csrf import CSRFError
 
 from app.accounts.auth import message
 from app.accounts.roles import is_admin
 from app.authorization.rules import can
-from app.models import STATUS_LABELS, Account, File, Invitation, Member, Project, db
-from app.projects import bp
-from app.projects import content, service
-from app.projects.service import TRANSITIONS, ProjectError, create_project
+from app.models import STATUS_LABELS, Account, File, Invitation, Member, Project, Theme, db
+from app.projects import bp, content, service
+from app.projects.service import TRANSITIONS, ProjectError, create_project, plain
 
 # --- Constantes ---
 LABELS = {
     **STATUS_LABELS,
-    "owner": "Owner", "collabo": "Collabo", "client": "Client",
+    "owner": "Owner", "collabo": "Collaborateur", "client": "Client",
     "encadrant": "Encadrant", "etudiant": "Étudiant",
 }
 ROLE_ORDER = ("owner", "collabo", "client", "encadrant")
+PARIS = ZoneInfo("Europe/Paris")  # dates enregistrées en UTC, affichées à l'heure de Paris
+LINKEDIN_SHARE = "https://www.linkedin.com/sharing/share-offsite/?url="
 # Action de la page projet -> (droit vérifié par can, message de confirmation).
 ACTIONS = {
     "submit": ("submit", "Projet soumis à la relecture."),
@@ -33,13 +38,31 @@ ACTIONS = {
     "remove_member": ("manage_members", "Membre retiré."),
     "cancel_invitation": ("manage_members", "Invitation annulée."),
     "transfer_ownership": ("transfer_ownership", "Rôle d'Owner transféré."),
+    "feature": ("feature_project", "Projet mis en avant."),
+    "unfeature": ("feature_project", "Projet retiré des phares."),
 }
+REVIEW_STATUSES = ("en_relecture", "reedition_demandee")  # badge « À relire »
 
 
 @bp.app_template_filter("label")
 def label(code):
     """Libellé en toutes lettres d'un statut ou d'un rôle."""
     return LABELS[code]
+
+
+@bp.app_template_filter("paris")
+def paris(moment, pattern="%d/%m/%Y %H:%M"):
+    return moment.replace(tzinfo=timezone.utc).astimezone(PARIS).strftime(pattern)
+
+
+def full_url(path):
+    """Adresse complète (référencement, partage) : site_url de config.json suivi du chemin."""
+    return current_app.config["SITE_URL"] + path
+
+
+@bp.app_context_processor
+def page_address():
+    return {"canonical": full_url(request.path)}
 
 
 @bp.app_errorhandler(404)
@@ -62,9 +85,60 @@ def csrf_expired(error):
     return message("Le formulaire a expiré. Rechargez la page et recommencez.", 400)
 
 
+def public_projects():
+    """Projets publics (règle view_published), du plus récent au plus ancien."""
+    projects = Project.query.order_by(Project.first_published_at.desc(), Project.id.desc())
+    return [project for project in projects if can(None, "view_published", project)]
+
+
+def public_cards(theme_id=None, words=""):
+    """Cartes des projets publics, filtrées par thème et par mot."""
+    cards = []
+    for project in public_projects():
+        if theme_id and theme_id not in [theme.id for theme in project.themes]:
+            continue
+        summary = content.summary(project)
+        if plain(words.strip()) in plain(f"{project.title} {summary}"):  # sans majuscules ni accents
+            cards.append({"project": project, "client": content.read_client(project, "published"),
+                          "excerpt": content.shorten(summary)})
+    return cards
+
+
 @bp.route("/")
 def home():
-    return render_template("home.html")
+    cards = public_cards()
+    return render_template("home.html", headline=cards[0] if cards else None,
+                           featured=[card for card in cards if card["project"].is_featured])
+
+
+@bp.route("/projets")
+def project_list():
+    theme_id, words = request.args.get("theme", type=int), request.args.get("q", "")
+    return render_template("list.html", cards=public_cards(theme_id, words), theme_id=theme_id, words=words,
+                           themes=offered_themes())
+
+
+@bp.route("/informations")
+def information():
+    return render_template("information.html")
+
+
+@bp.route("/robots.txt")
+def robots():
+    lines = ["User-agent: *", *[f"Disallow: {path}" for path in ("/mon-espace", "/login", "/logout", "/auth")],
+             f"Sitemap: {full_url('/sitemap.xml')}"]
+    return "\n".join(lines) + "\n", {"Content-Type": "text/plain; charset=utf-8"}
+
+
+@bp.route("/sitemap.xml")
+def sitemap():
+    paths = ["/", "/projets", "/informations", *[f"/projets/{project.slug}" for project in public_projects()]]
+    return render_template("sitemap.xml", urls=[full_url(path) for path in paths]), {"Content-Type": "application/xml"}
+
+
+def offered_themes(current=()):
+    """Thèmes proposés en cases à cocher : les actifs, et ceux que le projet a déjà."""
+    return sorted({*Theme.query.filter_by(active=True), *current}, key=lambda theme: theme.normalized_name)
 
 
 def my_projects(user):
@@ -80,29 +154,35 @@ def my_projects(user):
 @login_required
 def my_space():
     title, error, status = "", None, 200
+    checked = request.form.getlist("theme_ids", type=int)
     if request.method == "POST":
         title = request.form.get("title", "")
         supervisor_id = request.form.get("supervisor_id", type=int)
         try:
-            project = create_project(current_user, title, db.session.get(Account, supervisor_id) if supervisor_id else None)
+            supervisor = db.session.get(Account, supervisor_id) if supervisor_id else None
+            project = create_project(current_user, title, supervisor, checked, request.form.get("new_theme", ""))
             return redirect(url_for("projects.project_page", slug=project.slug))
         except ProjectError as refusal:
             error, status = str(refusal), 400
+    projects_by_role = my_projects(current_user)
+    team = projects_by_role["owner"] + projects_by_role["collabo"]
     return render_template(
         "my_space.html",
         admin=is_admin(current_user.email),
-        projects_by_role=my_projects(current_user),
+        projects_by_role=projects_by_role,
+        to_do=sum(project.status == "brouillon" for project in team),
+        to_review=sum(project.status in REVIEW_STATUSES for project in projects_by_role["encadrant"]),
         can_create=can(current_user, "create_project"),
         supervisors=Account.query.filter_by(base_role="encadrant").order_by(Account.name),
-        title=title, error=error,
+        themes=offered_themes(), checked=checked, title=title, error=error,
     ), status
 
 
 def visible_project(slug):
     """Le projet et « lisible ou non » ; 404 s'il n'est ni lisible ni public pour la personne."""
-    project = Project.query.filter_by(slug=slug).first()
-    readable = project is not None and can(current_user, "read_project", project)
-    if not readable and not (project is not None and can(current_user, "view_published", project)):
+    project = Project.query.filter_by(slug=slug).first() or abort(404)
+    readable = can(current_user, "read_project", project)
+    if not readable and not can(current_user, "view_published", project):
         abort(404)  # on ne révèle pas qu'un projet non public existe
     return project, readable
 
@@ -112,17 +192,19 @@ def allowed_actions(project):
     allowed = {action: can(current_user, right, project) for action, (right, _) in ACTIONS.items()}
     allowed["delete"] &= project.deleted_at is None
     allowed["restore"] &= project.deleted_at is not None
+    allowed["feature"] &= not project.is_featured
+    allowed["unfeature"] &= project.is_featured
     return allowed
 
 
 def show_project(project, readable, error=None, status=200):
-    # L'équipe voit le brouillon ; le public voit la dernière version validée.
-    folder = "draft" if readable else "published"
-    texts = {section: content.render(content.read_section(project, folder, section)) for section in content.SECTIONS}
+    # L'équipe voit tout le brouillon ; le public voit la présentation rapide de la dernière version validée.
+    folder, sections = ("draft", content.SECTIONS) if readable else ("published", {"resume": content.SECTIONS["resume"]})
+    texts = {s: content.render(content.read_section(project, folder, s), enlarge=not readable) for s in sections}
     return render_template(
-        "project.html", project=project, readable=readable, error=error, texts=texts,
+        "project.html", project=project, readable=readable, error=error, texts=texts, **public_page(project),
         client=content.read_client(project, folder),
-        sections=content.SECTIONS, can_edit=can(current_user, "edit_draft", project),
+        sections=sections, can_edit=can(current_user, "edit_draft", project),
         allowed=allowed_actions(project),
         supervisors=Account.query.filter_by(base_role="encadrant").order_by(Account.name),
     ), status
@@ -131,6 +213,27 @@ def show_project(project, readable, error=None, status=200):
 @bp.route("/projets/<slug>")
 def project_page(slug):
     return show_project(*visible_project(slug))
+
+
+def public_page(project):
+    """Description, image et adresses de partage d'une page publique de projet ; images à part du reste."""
+    files = [file for file in project.files if content.is_published_file(project, file.uuid)]
+    images = [file for file in files if file.mime_type.startswith("image/")]
+    address = full_url(url_for("projects.project_page", slug=project.slug))
+    return {"description": f"{project.title} : {content.shorten(content.summary(project))}",
+            "og_image": full_url(content.FILES_URL + images[0].uuid) if images else None,
+            "files": [file for file in files if file not in images],  # les images sont dans le texte
+            "address": address, "linkedin": LINKEDIN_SHARE + quote(address, safe="")}
+
+
+@bp.route("/projets/<slug>/detail")
+def project_detail(slug):
+    """Page détaillée publiée et fichiers publiés ; 404 si le projet n'est pas public."""
+    project = Project.query.filter_by(slug=slug).first() or abort(404)
+    if not can(current_user, "view_published", project):
+        abort(404)
+    text = content.render(content.read_section(project, "published", "detail"), enlarge=True)
+    return render_template("detail.html", project=project, text=text, **public_page(project))
 
 
 def from_form(model, field):
@@ -151,6 +254,8 @@ def run_action(action, user, project, form):
         return service.delete_project(user, project)
     if action == "restore":
         return service.restore_project(user, project)
+    if action in ("feature", "unfeature"):
+        return service.set_featured(user, project, action == "feature")
     if action == "assign_supervisor":
         return service.assign_supervisor(user, project, from_form(Account, "account_id"))
     if action == "invite":
@@ -186,7 +291,7 @@ def editable_project(slug):
     return project
 
 
-def show_editor(project, texts=None, versions=None, client=None, preview=False, error=None, status=200):
+def show_editor(project, texts=None, versions=None, client=None, checked=None, preview=False, error=None, status=200):
     """Éditeur ; sans textes donnés, ceux du disque et leurs empreintes d'ouverture."""
     if texts is None:
         texts = {s: content.read_section(project, "draft", s) for s in content.SECTIONS}
@@ -195,6 +300,8 @@ def show_editor(project, texts=None, versions=None, client=None, preview=False, 
         "editor.html", project=project, sections=content.SECTIONS, texts=texts, versions=versions,
         client=client or content.read_client(project, "draft"),
         images=[file for file in project.files if file.mime_type.startswith("image/")],
+        themes=offered_themes(project.themes),
+        checked=checked if checked is not None else [theme.id for theme in project.themes],
         previews={s: content.render(t) for s, t in texts.items()} if preview else None, error=error,
     ), status
 
@@ -208,13 +315,15 @@ def edit_draft(slug):
     texts = {s: request.form.get(s, "").replace("\r\n", "\n") for s in content.SECTIONS}
     versions = {s: request.form.get(f"version_{s}") for s in content.SECTIONS}
     client = {"name": request.form.get("client_name", ""), "logo": request.form.get("client_logo") or None}
+    checked = request.form.getlist("theme_ids", type=int)
     if request.form.get("preview"):
-        return show_editor(project, texts, versions, client, preview=True)
+        return show_editor(project, texts, versions, client, checked, preview=True)
     try:
         logo = File.query.filter_by(uuid=client["logo"]).first() if client["logo"] else None
-        service.save_draft(current_user, project, texts, versions, client["name"], logo)
+        service.save_draft(current_user, project, texts, versions, client["name"], logo, checked,
+                           request.form.get("new_theme", ""))
     except ProjectError as refusal:
-        return show_editor(project, texts, versions, client, error=str(refusal), status=409)
+        return show_editor(project, texts, versions, client, checked, error=str(refusal), status=409)
     flash("Brouillon enregistré.")
     return redirect(url_for("projects.edit_draft", slug=slug))
 

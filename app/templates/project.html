@@ -1,14 +1,17 @@
 {% extends "base.html" %}
 {% from "action.html" import action_form %}
 {% block title %}{{ project.title }} · BluePrintLab{% endblock %}
+{% block description %}{{ description }}{% endblock %}
+{% block og_type %}article{% endblock %}
+{% block og_image %}{% if og_image %}<meta property="og:image" content="{{ og_image }}">{% endif %}{% endblock %}
+{% block robots %}{% if readable %}<meta name="robots" content="noindex">{% endif %}{% endblock %}
 {% block content %}
 {% if project.deleted_at %}<p class="alerte">Ce projet est à la corbeille.</p>{% endif %}
 <h1>{{ project.title }}</h1>
 {% if readable %}<p>Statut : {{ project.status|label }}</p>{% endif %}
 <p>Encadrant : {{ project.supervisor.name if project.supervisor else "pas encore attribué" }}</p>
-{% if client.name or client.logo %}
-<p>Client : {% if client.logo %}<img class="logo" src="/fichiers/{{ client.logo }}" alt="Logo">{% endif %} {{ client.name }}</p>
-{% endif %}
+{% if project.themes %}<p>Thèmes : {{ project.themes|map(attribute="name")|join(", ") }}</p>{% endif %}
+{% include "_client.html" %}
 
 {% if error %}<p class="alerte">{{ error }}</p>{% endif %}
 {% if can_edit %}<p><a href="{{ url_for('projects.edit_draft', slug=project.slug) }}">Modifier le brouillon</a></p>{% endif %}
@@ -17,6 +20,11 @@
 <h2>{{ title }}</h2>
 {{ texts[section] }}
 {% endfor %}
+{% if not readable %}
+<p><a href="{{ url_for('projects.project_detail', slug=project.slug) }}">Voir la page détaillée</a></p>
+<p><a href="{{ linkedin }}" target="_blank" rel="noopener">Partager sur LinkedIn</a>
+  <button type="button" data-copy="{{ address }}">Copier le lien</button></p>
+{% endif %}
 
 <h2>Équipe</h2>
 <ul>
@@ -34,7 +42,7 @@
 <h2>Invitations en attente</h2>
 <ul>
   {% for invitation in project.invitations %}
-  <li>{{ invitation.email }} · {{ invitation.role|label }} · expire le {{ invitation.expires_at.strftime("%d/%m/%Y") }}
+  <li>{{ invitation.email }} · {{ invitation.role|label }} · expire le {{ invitation.expires_at|paris("%d/%m/%Y") }}
     {% call action_form(project, "cancel_invitation", "Annuler l'invitation") %}<input type="hidden" name="invitation_id" value="{{ invitation.id }}">{% endcall %}
   </li>
   {% endfor %}
@@ -42,7 +50,7 @@
 {% endif %}
 {% call action_form(project, "invite", "Inviter") %}
   <label>Adresse <input type="email" name="email" required></label>
-  <label>Rôle <select name="role"><option value="collabo">Collabo</option><option value="client">Client</option></select></label>
+  <label>Rôle <select name="role"><option value="collabo">Collaborateur</option><option value="client">Client</option></select></label>
 {% endcall %}
 {% endif %}
 
@@ -51,7 +59,7 @@
 {% if allowed.submit %}{{ action_form(project, "submit", "Soumettre à la relecture") }}{% endif %}
 {% if allowed.request_changes %}
   {% call action_form(project, "request_changes", "Demander des modifications") %}
-    <label>Message (facultatif) <input name="message"></label>
+    <label>Message pour l'équipe <input name="message" required></label>
   {% endcall %}
 {% endif %}
 {% if allowed.publish %}{{ action_form(project, "publish", "Republier" if project.status == "retire" else "Valider et publier") }}{% endif %}
@@ -77,16 +85,18 @@
     <label><input type="checkbox" name="confirm" required> Je confirme la suppression (corbeille de 30 jours)</label>
   {% endcall %}
 {% endif %}
+{% if allowed.feature %}{{ action_form(project, "feature", "Mettre en avant") }}{% endif %}
+{% if allowed.unfeature %}{{ action_form(project, "unfeature", "Retirer des phares") }}{% endif %}
 {% if allowed.restore %}{{ action_form(project, "restore", "Restaurer") }}{% endif %}
 {% endif %}
 
 {% if readable %}
 <h2>Historique</h2>
 <table>
-  <tr><th>Date (UTC)</th><th>Auteur</th><th>Statut</th><th>Message</th></tr>
+  <tr><th>Date (heure de Paris)</th><th>Auteur</th><th>Statut</th><th>Message</th></tr>
   {% for event in project.history %}
   <tr>
-    <td>{{ event.created_at.strftime("%d/%m/%Y %H:%M") }}</td>
+    <td>{{ event.created_at|paris }}</td>
     <td>{{ event.author.name if event.author else "ancien membre" }}</td>
     <td>{% if event.old_status %}{{ event.old_status|label }} → {% endif %}{{ event.new_status|label }}</td>
     <td>{{ event.message or "" }}</td>
@@ -95,3 +105,4 @@
 </table>
 {% endif %}
 {% endblock %}
+{% block scripts %}{% if not readable %}<script src="{{ url_for('static', filename='share.js') }}" defer></script>{% endif %}{% endblock %}

@@ -1,6 +1,8 @@
 """Le seul endroit qui touche au disque : textes Markdown et fichiers d'un projet."""
 import hashlib
+import html
 import json
+import re
 import shutil
 from pathlib import Path
 
@@ -14,7 +16,9 @@ SECTIONS = {"resume": "Présentation rapide", "detail": "Page détaillée"}  # u
 # Texte de départ de la présentation rapide (PUB-03).
 DEFAULT_TEXTS = {"resume": "## Objectifs\n\n## Description\n\n## Réalisations\n"}
 FILES_URL = "/fichiers/"
+EXCERPT_MAX = 200  # début de la présentation rapide sur les cartes
 CLIENT_FILE = "client.json"  # client ou société et son logo (EDI-05), copiés à la publication avec les textes
+FILES_LIST = "files.json"  # fichiers du projet au moment de la publication : la version publiée
 # Type -> octets attendus (position, valeur) ; le type vient du contenu réel, jamais de l'extension.
 SIGNATURES = {
     "image/png": ((0, b"\x89PNG\r\n\x1a\n"),),
@@ -60,8 +64,9 @@ def write_client(project, name, logo_uuid):
 
 
 def copy_draft_to_published(project):
-    """Publier = figer une copie du brouillon."""
+    """Publier = figer une copie du brouillon et noter les fichiers qui en font partie."""
     shutil.copytree(project_dir(project, "draft"), project_dir(project, "published"), dirs_exist_ok=True)
+    (project_dir(project, "published") / FILES_LIST).write_text(json.dumps([file.uuid for file in project.files]))
 
 
 def fingerprint(text):
@@ -70,14 +75,29 @@ def fingerprint(text):
 
 def keep_attribute(tag, attribute, value):
     """Seules les images envoyées sur BluePrintLab s'affichent (pas d'image externe)."""
-    if tag == "img" and attribute == "src" and not value.startswith(FILES_URL):
-        return None
-    return value
+    return None if tag == "img" and attribute == "src" and not value.startswith(FILES_URL) else value
 
 
-def render(text):
-    """Markdown vers HTML, puis nettoyé contre l'injection de code (XSS)."""
-    return Markup(nh3.clean(markdown.markdown(text), attribute_filter=keep_attribute))
+def render(text, enlarge=False):
+    """Markdown vers HTML, puis nettoyé contre l'injection de code (XSS).
+
+    `enlarge` (pages publiques) : chaque image devient un lien vers son fichier, pour l'ouvrir en grand.
+    """
+    cleaned = nh3.clean(markdown.markdown(text), attribute_filter=keep_attribute)
+    if enlarge:
+        cleaned = re.sub(r'(<img [^>]*src="([^"]+)"[^>]*>)', r'<a href="\2">\1</a>', cleaned)
+    return Markup(cleaned)
+
+
+def summary(project):
+    """Présentation rapide publiée en texte brut, sans les titres (lignes « # ») ni balises ni scripts."""
+    lines = [line for line in read_section(project, "published", "resume").splitlines() if not line.startswith("#")]
+    text = html.unescape(nh3.clean(markdown.markdown("\n".join(lines)), tags=set()))
+    return " ".join(text.split())
+
+
+def shorten(text):
+    return text if len(text) <= EXCERPT_MAX else text[:EXCERPT_MAX - 1] + "…"
 
 
 def detect_type(data):
@@ -176,7 +196,7 @@ def clean_file(data, mime_type):
 
 
 def write_file(project, file_uuid, data):
-    (project_dir(project, "files") / file_uuid).write_bytes(data)
+    file_path(project, file_uuid).write_bytes(data)
 
 
 def file_path(project, file_uuid):
@@ -188,6 +208,6 @@ def delete_file(project, file_uuid):
 
 
 def is_published_file(project, file_uuid):
-    """Le fichier est cité par la version validée du projet, ou en est le logo."""
-    return read_client(project, "published")["logo"] == file_uuid or any(
-        FILES_URL + file_uuid in read_section(project, "published", s) for s in SECTIONS)
+    """Le fichier fait partie de la version validée du projet (cité dans le texte ou non)."""
+    path = project_dir(project, "published") / FILES_LIST
+    return path.exists() and file_uuid in json.loads(path.read_text())

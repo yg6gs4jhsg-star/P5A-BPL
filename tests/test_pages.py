@@ -1,3 +1,5 @@
+import re
+
 import pytest
 
 from app import create_app
@@ -48,8 +50,8 @@ def test_draft_page_by_role(client, people, project, who):
     text = response.text
     assert response.status_code == 200
     assert "Drone autonome" in text and "Statut : Brouillon" in text and "Eric" in text
-    assert "Colin · Collabo" in text and "Clara · Client" in text and "Olga · Owner" in text
-    assert "Date (UTC)" in text
+    assert "Colin · Collaborateur" in text and "Clara · Client" in text and "Olga · Owner" in text
+    assert "Date (heure de Paris)" in text
     assert "colin@epfedu.fr" not in text and "olga@epfedu.fr" not in text  # jamais les adresses de l'équipe
     assert ("pas.encore@epfedu.fr" in text) is (who in ("owner", "admin"))  # invitations : manage_members
 
@@ -92,7 +94,7 @@ def test_my_space_lists_projects_by_role(client, people, project):
     assert "Vieux projet" not in text
 
 
-@pytest.mark.parametrize("who, heading", [("collabo", "Collabo"), ("client", "Client"), ("encadrant", "Encadrant")])
+@pytest.mark.parametrize("who, heading", [("collabo", "Collaborateur"), ("client", "Client"), ("encadrant", "Encadrant")])
 def test_my_space_other_roles(client, people, project, who, heading):
     text = view(client, people, who, "/mon-espace").text
     assert f"<h2>{heading}</h2>" in text and "Drone autonome" in text
@@ -153,3 +155,19 @@ def test_post_without_csrf_token_refused(tmp_path):
         assert response.status_code == 400 and "Le formulaire a expiré" in response.text
         db.session.remove()
         db.engine.dispose()
+
+
+def test_word_collabo_never_shown(client, people, project):
+    """On écrit « Collaborateur » : le mot abrégé n'apparaît sur aucune page principale."""
+    pages = []
+    for who in ("owner", "collabo", "admin"):
+        log_in(client, people[who])
+        pages += [client.get(url).text for url in ("/", "/mon-espace", "/projets/drone-autonome")]
+    log_in(client, people["owner"])
+    pages.append(client.get("/projets/drone-autonome/editer").text)
+    pages.append(client.post("/projets/drone-autonome/invite", data={"email": "prof@epf.fr", "role": "collabo"}).text)
+    pages.append(client.post("/projets/drone-autonome/transfer_ownership",
+                             data={"account_id": people["client"].id}).text)
+    visible = [re.sub(r"<[^>]+>", " ", page) for page in pages]  # texte lu à l'écran, sans les balises
+    assert not any(re.search(r"collabo(?!rateur)", text, re.IGNORECASE) for text in visible)
+    assert "Un Collaborateur doit être un étudiant." in visible[-2]

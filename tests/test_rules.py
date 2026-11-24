@@ -5,8 +5,8 @@ from app.models import AdminEmail, Member, Project, db, utcnow
 from tests.conftest import person
 
 # Matrice des droits (§ 2.2) : action -> (statut du projet testé, droits V C Co O E A).
-# V visiteur, C client, Co collabo, O owner, E encadrant du projet, A admin. None = sans projet.
-# create_project : « tout étudiant connecté » ; le Collabo de test est étudiant, le Client et l'admin non.
+# V visiteur, C client, Co Collaborateur, O owner, E encadrant du projet, A admin. None = sans projet.
+# create_project : « tout étudiant connecté » ; le Collaborateur de test est étudiant, le Client et l'admin non.
 MATRIX = {
     "view_published":     ("publie",             "111111"),
     "read_project":       ("brouillon",          "011111"),
