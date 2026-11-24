@@ -7,7 +7,7 @@ from app.accounts.roles import is_admin
 from app.authorization.rules import can
 from app.models import STATUS_LABELS, Account, File, Invitation, Member, Project, Theme, db
 from app.projects import bp, content, service
-from app.projects.service import TRANSITIONS, ProjectError, create_project
+from app.projects.service import TRANSITIONS, ProjectError, create_project, plain
 
 # --- Constantes ---
 LABELS = {
@@ -64,13 +64,18 @@ def csrf_expired(error):
     return message("Le formulaire a expiré. Rechargez la page et recommencez.", 400)
 
 
-def public_cards(theme_id=None):
-    """Projets publics (règle view_published), du plus récent au plus ancien, prêts pour les cartes."""
+def public_cards(theme_id=None, words=""):
+    """Projets publics (règle view_published), du plus récent au plus ancien, filtrés par thème et par mot."""
     cards = []
     for project in Project.query.order_by(Project.first_published_at.desc(), Project.id.desc()):
-        if can(None, "view_published", project) and (theme_id is None or theme_id in [t.id for t in project.themes]):
+        if not can(None, "view_published", project):
+            continue
+        if theme_id and theme_id not in [theme.id for theme in project.themes]:
+            continue
+        summary = content.summary(project)
+        if plain(words.strip()) in plain(f"{project.title} {summary}"):  # sans majuscules ni accents
             cards.append({"project": project, "client": content.read_client(project, "published"),
-                          "excerpt": content.excerpt(project)})
+                          "excerpt": content.shorten(summary)})
     return cards
 
 
@@ -83,9 +88,14 @@ def home():
 
 @bp.route("/projets")
 def project_list():
-    theme_id = request.args.get("theme", type=int)
-    return render_template("list.html", cards=public_cards(theme_id), theme_id=theme_id,
+    theme_id, words = request.args.get("theme", type=int), request.args.get("q", "")
+    return render_template("list.html", cards=public_cards(theme_id, words), theme_id=theme_id, words=words,
                            themes=offered_themes())
+
+
+@bp.route("/informations")
+def information():
+    return render_template("information.html")
 
 
 def offered_themes(current=()):
@@ -175,7 +185,9 @@ def project_detail(slug):
         abort(404)
     return render_template(
         "detail.html", project=project, text=content.render(content.read_section(project, "published", "detail")),
-        files=[file for file in project.files if content.is_published_file(project, file.uuid)],
+        # Les images sont dans le texte ; les autres fichiers de la version publiée sont listés.
+        files=[file for file in project.files
+               if not file.mime_type.startswith("image/") and content.is_published_file(project, file.uuid)],
     )
 
 

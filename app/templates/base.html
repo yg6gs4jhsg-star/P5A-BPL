@@ -9,6 +9,8 @@
 <body>
   <header>
     <a class="site" href="{{ url_for('projects.home') }}">BluePrintLab</a>
+    <a href="{{ url_for('projects.project_list') }}">Projets</a>
+    <a href="{{ url_for('projects.information') }}">Informations</a>
     <a href="{{ url_for('projects.my_space') }}">Mon espace</a>
     {% if current_user.is_authenticated %}
       <form method="post" action="{{ url_for('accounts.logout') }}">

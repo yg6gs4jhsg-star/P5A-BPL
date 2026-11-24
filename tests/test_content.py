@@ -241,13 +241,15 @@ def test_upload_error_shown(client, people, project):
 
 def test_public_sees_only_published_files(client, people, project):
     shown = add_file(people["owner"], project, "photo.png", PNG)
-    hidden = add_file(people["owner"], project, "brouillon.pdf", PDF)
     save_draft(people["owner"], project, {"resume": f"![photo](/fichiers/{shown.uuid})"}, versions(project))
     assert client.get(f"/fichiers/{shown.uuid}").status_code == 404  # pas encore publié
     publish(project, people)
     response = client.get(f"/fichiers/{shown.uuid}")
     assert response.status_code == 200
     response.close()
+    change_status(people["owner"], project, "request_reedition")
+    change_status(people["encadrant"], project, "accept_reedition")
+    hidden = add_file(people["owner"], project, "brouillon.pdf", PDF)  # envoyé après la publication
     assert client.get(f"/fichiers/{hidden.uuid}").status_code == 404
     assert client.get("/fichiers/inconnu").status_code == 404
     assert f'src="/fichiers/{shown.uuid}"' in client.get("/projets/drone").text
