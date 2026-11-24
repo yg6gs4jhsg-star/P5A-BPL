@@ -64,9 +64,28 @@ def csrf_expired(error):
     return message("Le formulaire a expiré. Rechargez la page et recommencez.", 400)
 
 
+def public_cards(theme_id=None):
+    """Projets publics (règle view_published), du plus récent au plus ancien, prêts pour les cartes."""
+    cards = []
+    for project in Project.query.order_by(Project.first_published_at.desc(), Project.id.desc()):
+        if can(None, "view_published", project) and (theme_id is None or theme_id in [t.id for t in project.themes]):
+            cards.append({"project": project, "client": content.read_client(project, "published"),
+                          "excerpt": content.excerpt(project)})
+    return cards
+
+
 @bp.route("/")
 def home():
-    return render_template("home.html")
+    cards = public_cards()
+    return render_template("home.html", headline=cards[0] if cards else None,
+                           featured=[card for card in cards if card["project"].is_featured])
+
+
+@bp.route("/projets")
+def project_list():
+    theme_id = request.args.get("theme", type=int)
+    return render_template("list.html", cards=public_cards(theme_id), theme_id=theme_id,
+                           themes=offered_themes())
 
 
 def offered_themes(current=()):
@@ -131,13 +150,13 @@ def allowed_actions(project):
 
 
 def show_project(project, readable, error=None, status=200):
-    # L'équipe voit le brouillon ; le public voit la dernière version validée.
-    folder = "draft" if readable else "published"
-    texts = {section: content.render(content.read_section(project, folder, section)) for section in content.SECTIONS}
+    # L'équipe voit tout le brouillon ; le public voit la présentation rapide de la dernière version validée.
+    folder, sections = ("draft", content.SECTIONS) if readable else ("published", {"resume": content.SECTIONS["resume"]})
+    texts = {section: content.render(content.read_section(project, folder, section)) for section in sections}
     return render_template(
         "project.html", project=project, readable=readable, error=error, texts=texts,
         client=content.read_client(project, folder),
-        sections=content.SECTIONS, can_edit=can(current_user, "edit_draft", project),
+        sections=sections, can_edit=can(current_user, "edit_draft", project),
         allowed=allowed_actions(project),
         supervisors=Account.query.filter_by(base_role="encadrant").order_by(Account.name),
     ), status
@@ -146,6 +165,18 @@ def show_project(project, readable, error=None, status=200):
 @bp.route("/projets/<slug>")
 def project_page(slug):
     return show_project(*visible_project(slug))
+
+
+@bp.route("/projets/<slug>/detail")
+def project_detail(slug):
+    """Page détaillée publiée et fichiers publiés ; 404 si le projet n'est pas public."""
+    project = Project.query.filter_by(slug=slug).first() or abort(404)
+    if not can(current_user, "view_published", project):
+        abort(404)
+    return render_template(
+        "detail.html", project=project, text=content.render(content.read_section(project, "published", "detail")),
+        files=[file for file in project.files if content.is_published_file(project, file.uuid)],
+    )
 
 
 def from_form(model, field):

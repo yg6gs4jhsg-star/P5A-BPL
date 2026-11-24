@@ -1,0 +1,6 @@
+{# Carte d'un projet public : accueil et liste. #}
+<article class="carte">
+  <h3><a href="{{ url_for('projects.project_page', slug=card.project.slug) }}">{{ card.project.title }}</a></h3>
+  {% with client=card.client %}{% include "_client.html" %}{% endwith %}
+  <p>{{ card.excerpt }}</p>
+</article>

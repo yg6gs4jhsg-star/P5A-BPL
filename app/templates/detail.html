@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}{{ project.title }} · BluePrintLab{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('projects.project_page', slug=project.slug) }}">← Retour au projet</a></p>
+<h1>{{ project.title }}</h1>
+{{ text }}
+{% if files %}
+<h2>Fichiers</h2>
+<ul>
+  {% for file in files %}
+  <li>{% if file.mime_type == "video/mp4" %}<video controls src="/fichiers/{{ file.uuid }}"></video><br>{% endif %}
+    <a href="/fichiers/{{ file.uuid }}">{{ file.original_name }}</a></li>
+  {% endfor %}
+</ul>
+{% endif %}
+{% endblock %}

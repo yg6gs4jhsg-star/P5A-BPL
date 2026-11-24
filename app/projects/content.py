@@ -1,5 +1,6 @@
 """Le seul endroit qui touche au disque : textes Markdown et fichiers d'un projet."""
 import hashlib
+import html
 import json
 import shutil
 from pathlib import Path
@@ -14,6 +15,7 @@ SECTIONS = {"resume": "Présentation rapide", "detail": "Page détaillée"}  # u
 # Texte de départ de la présentation rapide (PUB-03).
 DEFAULT_TEXTS = {"resume": "## Objectifs\n\n## Description\n\n## Réalisations\n"}
 FILES_URL = "/fichiers/"
+EXCERPT_MAX = 200  # début de la présentation rapide sur les cartes
 CLIENT_FILE = "client.json"  # client ou société et son logo (EDI-05), copiés à la publication avec les textes
 # Type -> octets attendus (position, valeur) ; le type vient du contenu réel, jamais de l'extension.
 SIGNATURES = {
@@ -76,6 +78,13 @@ def keep_attribute(tag, attribute, value):
 def render(text):
     """Markdown vers HTML, puis nettoyé contre l'injection de code (XSS)."""
     return Markup(nh3.clean(markdown.markdown(text), attribute_filter=keep_attribute))
+
+
+def excerpt(project):
+    """Début de la présentation rapide publiée, en texte brut (balises et scripts retirés)."""
+    text = html.unescape(nh3.clean(markdown.markdown(read_section(project, "published", "resume")), tags=set()))
+    text = " ".join(text.split())
+    return text if len(text) <= EXCERPT_MAX else text[:EXCERPT_MAX - 1] + "…"
 
 
 def detect_type(data):

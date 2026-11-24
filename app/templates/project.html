@@ -7,9 +7,7 @@
 {% if readable %}<p>Statut : {{ project.status|label }}</p>{% endif %}
 <p>Encadrant : {{ project.supervisor.name if project.supervisor else "pas encore attribué" }}</p>
 {% if project.themes %}<p>Thèmes : {{ project.themes|map(attribute="name")|join(", ") }}</p>{% endif %}
-{% if client.name or client.logo %}
-<p>Client : {% if client.logo %}<img class="logo" src="/fichiers/{{ client.logo }}" alt="Logo">{% endif %} {{ client.name }}</p>
-{% endif %}
+{% include "_client.html" %}
 
 {% if error %}<p class="alerte">{{ error }}</p>{% endif %}
 {% if can_edit %}<p><a href="{{ url_for('projects.edit_draft', slug=project.slug) }}">Modifier le brouillon</a></p>{% endif %}
@@ -18,6 +16,7 @@
 <h2>{{ title }}</h2>
 {{ texts[section] }}
 {% endfor %}
+{% if not readable %}<p><a href="{{ url_for('projects.project_detail', slug=project.slug) }}">Voir la page détaillée</a></p>{% endif %}
 
 <h2>Équipe</h2>
 <ul>
