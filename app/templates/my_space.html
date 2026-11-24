@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Mon espace · BluePrintLab{% endblock %}
+{% block robots %}<meta name="robots" content="noindex">{% endblock %}
 {% block content %}
 <h1>Mon espace</h1>
 <p>{{ current_user.name }} · {{ current_user.base_role|label }}{% if admin %} · admin{% endif %}</p>

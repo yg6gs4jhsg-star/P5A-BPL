@@ -9,3 +9,4 @@ nh3==0.3.8
 pytest==9.2.0
 python-dotenv==1.2.4
 requests==2.34.2
+tzdata==2026.6

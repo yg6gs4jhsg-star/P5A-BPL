@@ -2,6 +2,7 @@
 import hashlib
 import html
 import json
+import re
 import shutil
 from pathlib import Path
 
@@ -77,9 +78,15 @@ def keep_attribute(tag, attribute, value):
     return None if tag == "img" and attribute == "src" and not value.startswith(FILES_URL) else value
 
 
-def render(text):
-    """Markdown vers HTML, puis nettoyé contre l'injection de code (XSS)."""
-    return Markup(nh3.clean(markdown.markdown(text), attribute_filter=keep_attribute))
+def render(text, enlarge=False):
+    """Markdown vers HTML, puis nettoyé contre l'injection de code (XSS).
+
+    `enlarge` (pages publiques) : chaque image devient un lien vers son fichier, pour l'ouvrir en grand.
+    """
+    cleaned = nh3.clean(markdown.markdown(text), attribute_filter=keep_attribute)
+    if enlarge:
+        cleaned = re.sub(r'(<img [^>]*src="([^"]+)"[^>]*>)', r'<a href="\2">\1</a>', cleaned)
+    return Markup(cleaned)
 
 
 def summary(project):

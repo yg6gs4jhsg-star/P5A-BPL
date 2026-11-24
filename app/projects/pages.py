@@ -1,4 +1,8 @@
-from flask import abort, flash, redirect, render_template, request, send_file, url_for
+from datetime import timezone
+from urllib.parse import quote
+from zoneinfo import ZoneInfo
+
+from flask import abort, current_app, flash, redirect, render_template, request, send_file, url_for
 from flask_login import current_user, login_required
 from flask_wtf.csrf import CSRFError
 
@@ -16,6 +20,8 @@ LABELS = {
     "encadrant": "Encadrant", "etudiant": "Étudiant",
 }
 ROLE_ORDER = ("owner", "collabo", "client", "encadrant")
+PARIS = ZoneInfo("Europe/Paris")  # dates enregistrées en UTC, affichées à l'heure de Paris
+LINKEDIN_SHARE = "https://www.linkedin.com/sharing/share-offsite/?url="
 # Action de la page projet -> (droit vérifié par can, message de confirmation).
 ACTIONS = {
     "submit": ("submit", "Projet soumis à la relecture."),
@@ -44,6 +50,21 @@ def label(code):
     return LABELS[code]
 
 
+@bp.app_template_filter("paris")
+def paris(moment, pattern="%d/%m/%Y %H:%M"):
+    return moment.replace(tzinfo=timezone.utc).astimezone(PARIS).strftime(pattern)
+
+
+def full_url(path):
+    """Adresse complète (référencement, partage) : site_url de config.json suivi du chemin."""
+    return current_app.config["SITE_URL"] + path
+
+
+@bp.app_context_processor
+def page_address():
+    return {"canonical": full_url(request.path)}
+
+
 @bp.app_errorhandler(404)
 def not_found(error):
     return message("Page introuvable.", 404)
@@ -64,12 +85,16 @@ def csrf_expired(error):
     return message("Le formulaire a expiré. Rechargez la page et recommencez.", 400)
 
 
+def public_projects():
+    """Projets publics (règle view_published), du plus récent au plus ancien."""
+    projects = Project.query.order_by(Project.first_published_at.desc(), Project.id.desc())
+    return [project for project in projects if can(None, "view_published", project)]
+
+
 def public_cards(theme_id=None, words=""):
-    """Projets publics (règle view_published), du plus récent au plus ancien, filtrés par thème et par mot."""
+    """Cartes des projets publics, filtrées par thème et par mot."""
     cards = []
-    for project in Project.query.order_by(Project.first_published_at.desc(), Project.id.desc()):
-        if not can(None, "view_published", project):
-            continue
+    for project in public_projects():
         if theme_id and theme_id not in [theme.id for theme in project.themes]:
             continue
         summary = content.summary(project)
@@ -96,6 +121,19 @@ def project_list():
 @bp.route("/informations")
 def information():
     return render_template("information.html")
+
+
+@bp.route("/robots.txt")
+def robots():
+    lines = ["User-agent: *", *[f"Disallow: {path}" for path in ("/mon-espace", "/login", "/logout", "/auth")],
+             f"Sitemap: {full_url('/sitemap.xml')}"]
+    return "\n".join(lines) + "\n", {"Content-Type": "text/plain; charset=utf-8"}
+
+
+@bp.route("/sitemap.xml")
+def sitemap():
+    paths = ["/", "/projets", "/informations", *[f"/projets/{project.slug}" for project in public_projects()]]
+    return render_template("sitemap.xml", urls=[full_url(path) for path in paths]), {"Content-Type": "application/xml"}
 
 
 def offered_themes(current=()):
@@ -162,9 +200,9 @@ def allowed_actions(project):
 def show_project(project, readable, error=None, status=200):
     # L'équipe voit tout le brouillon ; le public voit la présentation rapide de la dernière version validée.
     folder, sections = ("draft", content.SECTIONS) if readable else ("published", {"resume": content.SECTIONS["resume"]})
-    texts = {section: content.render(content.read_section(project, folder, section)) for section in sections}
+    texts = {s: content.render(content.read_section(project, folder, s), enlarge=not readable) for s in sections}
     return render_template(
-        "project.html", project=project, readable=readable, error=error, texts=texts,
+        "project.html", project=project, readable=readable, error=error, texts=texts, **public_page(project),
         client=content.read_client(project, folder),
         sections=sections, can_edit=can(current_user, "edit_draft", project),
         allowed=allowed_actions(project),
@@ -177,18 +215,25 @@ def project_page(slug):
     return show_project(*visible_project(slug))
 
 
+def public_page(project):
+    """Description, image et adresses de partage d'une page publique de projet ; images à part du reste."""
+    files = [file for file in project.files if content.is_published_file(project, file.uuid)]
+    images = [file for file in files if file.mime_type.startswith("image/")]
+    address = full_url(url_for("projects.project_page", slug=project.slug))
+    return {"description": f"{project.title} : {content.shorten(content.summary(project))}",
+            "og_image": full_url(content.FILES_URL + images[0].uuid) if images else None,
+            "files": [file for file in files if file not in images],  # les images sont dans le texte
+            "address": address, "linkedin": LINKEDIN_SHARE + quote(address, safe="")}
+
+
 @bp.route("/projets/<slug>/detail")
 def project_detail(slug):
     """Page détaillée publiée et fichiers publiés ; 404 si le projet n'est pas public."""
     project = Project.query.filter_by(slug=slug).first() or abort(404)
     if not can(current_user, "view_published", project):
         abort(404)
-    return render_template(
-        "detail.html", project=project, text=content.render(content.read_section(project, "published", "detail")),
-        # Les images sont dans le texte ; les autres fichiers de la version publiée sont listés.
-        files=[file for file in project.files
-               if not file.mime_type.startswith("image/") and content.is_published_file(project, file.uuid)],
-    )
+    text = content.render(content.read_section(project, "published", "detail"), enlarge=True)
+    return render_template("detail.html", project=project, text=text, **public_page(project))
 
 
 def from_form(model, field):

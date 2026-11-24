@@ -51,7 +51,7 @@ def test_draft_page_by_role(client, people, project, who):
     assert response.status_code == 200
     assert "Drone autonome" in text and "Statut : Brouillon" in text and "Eric" in text
     assert "Colin · Collaborateur" in text and "Clara · Client" in text and "Olga · Owner" in text
-    assert "Date (UTC)" in text
+    assert "Date (heure de Paris)" in text
     assert "colin@epfedu.fr" not in text and "olga@epfedu.fr" not in text  # jamais les adresses de l'équipe
     assert ("pas.encore@epfedu.fr" in text) is (who in ("owner", "admin"))  # invitations : manage_members
 

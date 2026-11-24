@@ -158,7 +158,9 @@ def test_draft_file_refused_until_next_publication(client, people):
 def test_no_script_reaches_public_pages(client, people):
     make(people, "Drone", resume="<script>alert(1)</script> Bonjour")
     for url in ("/", "/projets", "/projets/drone", "/projets/drone/detail"):
-        assert "<script" not in client.get(url).text and "alert(1)" not in client.get(url).text
+        text = client.get(url).text
+        assert "alert(1)" not in text
+        assert text.count("<script") == text.count('<script src="/static/share.js"')  # seul le script du site
 
 
 

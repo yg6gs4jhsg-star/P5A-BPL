@@ -1,6 +1,10 @@
 {% extends "base.html" %}
 {% from "action.html" import action_form %}
 {% block title %}{{ project.title }} · BluePrintLab{% endblock %}
+{% block description %}{{ description }}{% endblock %}
+{% block og_type %}article{% endblock %}
+{% block og_image %}{% if og_image %}<meta property="og:image" content="{{ og_image }}">{% endif %}{% endblock %}
+{% block robots %}{% if readable %}<meta name="robots" content="noindex">{% endif %}{% endblock %}
 {% block content %}
 {% if project.deleted_at %}<p class="alerte">Ce projet est à la corbeille.</p>{% endif %}
 <h1>{{ project.title }}</h1>
@@ -16,7 +20,11 @@
 <h2>{{ title }}</h2>
 {{ texts[section] }}
 {% endfor %}
-{% if not readable %}<p><a href="{{ url_for('projects.project_detail', slug=project.slug) }}">Voir la page détaillée</a></p>{% endif %}
+{% if not readable %}
+<p><a href="{{ url_for('projects.project_detail', slug=project.slug) }}">Voir la page détaillée</a></p>
+<p><a href="{{ linkedin }}" target="_blank" rel="noopener">Partager sur LinkedIn</a>
+  <button type="button" data-copy="{{ address }}">Copier le lien</button></p>
+{% endif %}
 
 <h2>Équipe</h2>
 <ul>
@@ -34,7 +42,7 @@
 <h2>Invitations en attente</h2>
 <ul>
   {% for invitation in project.invitations %}
-  <li>{{ invitation.email }} · {{ invitation.role|label }} · expire le {{ invitation.expires_at.strftime("%d/%m/%Y") }}
+  <li>{{ invitation.email }} · {{ invitation.role|label }} · expire le {{ invitation.expires_at|paris("%d/%m/%Y") }}
     {% call action_form(project, "cancel_invitation", "Annuler l'invitation") %}<input type="hidden" name="invitation_id" value="{{ invitation.id }}">{% endcall %}
   </li>
   {% endfor %}
@@ -85,10 +93,10 @@
 {% if readable %}
 <h2>Historique</h2>
 <table>
-  <tr><th>Date (UTC)</th><th>Auteur</th><th>Statut</th><th>Message</th></tr>
+  <tr><th>Date (heure de Paris)</th><th>Auteur</th><th>Statut</th><th>Message</th></tr>
   {% for event in project.history %}
   <tr>
-    <td>{{ event.created_at.strftime("%d/%m/%Y %H:%M") }}</td>
+    <td>{{ event.created_at|paris }}</td>
     <td>{{ event.author.name if event.author else "ancien membre" }}</td>
     <td>{% if event.old_status %}{{ event.old_status|label }} → {% endif %}{{ event.new_status|label }}</td>
     <td>{{ event.message or "" }}</td>
@@ -97,3 +105,4 @@
 </table>
 {% endif %}
 {% endblock %}
+{% block scripts %}{% if not readable %}<script src="{{ url_for('static', filename='share.js') }}" defer></script>{% endif %}{% endblock %}
