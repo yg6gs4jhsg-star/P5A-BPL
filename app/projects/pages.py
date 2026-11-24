@@ -1,3 +1,4 @@
+import zlib
 from datetime import timezone
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
@@ -22,6 +23,8 @@ LABELS = {
 ROLE_ORDER = ("owner", "collabo", "client", "encadrant")
 PARIS = ZoneInfo("Europe/Paris")  # dates enregistrées en UTC, affichées à l'heure de Paris
 LINKEDIN_SHARE = "https://www.linkedin.com/sharing/share-offsite/?url="
+THEME_COLORS = ("#000000", "#7A37E4", "#FF611B", "#F7429F", "#470A68", "#DF231D")  # pastilles de thème (charte)
+CONTACT = ""  # contact affiché sur la page d'informations ; vide : le bloc n'apparaît pas
 # Action de la page projet -> (droit vérifié par can, message de confirmation).
 ACTIONS = {
     "submit": ("submit", "Projet soumis à la relecture."),
@@ -53,6 +56,17 @@ def label(code):
 @bp.app_template_filter("paris")
 def paris(moment, pattern="%d/%m/%Y %H:%M"):
     return moment.replace(tzinfo=timezone.utc).astimezone(PARIS).strftime(pattern)
+
+
+@bp.app_template_filter("theme_color")
+def theme_color(name):
+    """Couleur de la pastille d'un thème : toujours la même pour le même nom."""
+    return THEME_COLORS[zlib.crc32(name.encode()) % len(THEME_COLORS)]
+
+
+@bp.app_template_filter("initials")
+def initials(name):
+    return "".join(word[0] for word in name.split()[:2]).upper()
 
 
 def full_url(path):
@@ -100,7 +114,7 @@ def public_cards(theme_id=None, words=""):
         summary = content.summary(project)
         if plain(words.strip()) in plain(f"{project.title} {summary}"):  # sans majuscules ni accents
             cards.append({"project": project, "client": content.read_client(project, "published"),
-                          "excerpt": content.shorten(summary)})
+                          "excerpt": content.shorten(summary), "image": first_image(published_files(project))})
     return cards
 
 
@@ -120,7 +134,7 @@ def project_list():
 
 @bp.route("/informations")
 def information():
-    return render_template("information.html")
+    return render_template("information.html", contact=CONTACT)
 
 
 @bp.route("/robots.txt")
@@ -198,13 +212,15 @@ def allowed_actions(project):
 
 
 def show_project(project, readable, error=None, status=200):
-    # L'équipe voit tout le brouillon ; le public voit la présentation rapide de la dernière version validée.
-    folder, sections = ("draft", content.SECTIONS) if readable else ("published", {"resume": content.SECTIONS["resume"]})
-    texts = {s: content.render(content.read_section(project, folder, s), enlarge=not readable) for s in sections}
+    """Page de gestion (équipe, encadrant, admin : tout le brouillon), ou page publique (présentation rapide publiée)."""
+    if not readable:
+        return render_template("public_project.html", project=project, **public_page(project),
+                               text=content.render(content.read_section(project, "published", "resume"), enlarge=True))
+    texts = {s: content.render(content.read_section(project, "draft", s)) for s in content.SECTIONS}
     return render_template(
-        "project.html", project=project, readable=readable, error=error, texts=texts, **public_page(project),
-        client=content.read_client(project, folder),
-        sections=sections, can_edit=can(current_user, "edit_draft", project),
+        "project.html", project=project, error=error, texts=texts,
+        client=content.read_client(project, "draft"),
+        sections=content.SECTIONS, can_edit=can(current_user, "edit_draft", project),
         allowed=allowed_actions(project),
         supervisors=Account.query.filter_by(base_role="encadrant").order_by(Account.name),
     ), status
@@ -215,14 +231,22 @@ def project_page(slug):
     return show_project(*visible_project(slug))
 
 
+def published_files(project):
+    return [file for file in project.files if content.is_published_file(project, file.uuid)]
+
+
+def first_image(files):
+    return next((file for file in files if file.mime_type.startswith("image/")), None)
+
+
 def public_page(project):
-    """Description, image et adresses de partage d'une page publique de projet ; images à part du reste."""
-    files = [file for file in project.files if content.is_published_file(project, file.uuid)]
-    images = [file for file in files if file.mime_type.startswith("image/")]
-    address = full_url(url_for("projects.project_page", slug=project.slug))
+    """Client, description, image et adresses de partage d'une page publique de projet ; images à part du reste."""
+    files = published_files(project)
+    image, address = first_image(files), full_url(url_for("projects.project_page", slug=project.slug))
     return {"description": f"{project.title} : {content.shorten(content.summary(project))}",
-            "og_image": full_url(content.FILES_URL + images[0].uuid) if images else None,
-            "files": [file for file in files if file not in images],  # les images sont dans le texte
+            "og_image": full_url(content.FILES_URL + image.uuid) if image else None,
+            "files": [file for file in files if not file.mime_type.startswith("image/")],  # images : dans le texte
+            "client": content.read_client(project, "published"),
             "address": address, "linkedin": LINKEDIN_SHARE + quote(address, safe="")}
 
 

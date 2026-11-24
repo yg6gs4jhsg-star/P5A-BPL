@@ -96,8 +96,8 @@ def test_share_links_on_public_page_only(client, people):
     public_project(people)
     text = client.get("/projets/drone").text
     assert ('href="https://www.linkedin.com/sharing/share-offsite/?url=http%3A%2F%2Flocalhost%3A8000%2Fprojets%2Fdrone"'
-            ' target="_blank" rel="noopener">Partager sur LinkedIn</a>') in text
-    assert f'data-copy="{SITE}/projets/drone">Copier le lien</button>' in text and "/static/share.js" in text
+            ' target="_blank" rel="noopener">') in text and "Partager sur LinkedIn</a>" in text
+    assert f'data-copy="{SITE}/projets/drone">' in text and "Copier le lien</button>" in text and "/static/share.js" in text
     log_in(client, people["owner"])
     assert "LinkedIn" not in client.get("/projets/drone").text  # page de gestion
 

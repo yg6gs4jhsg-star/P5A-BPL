@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon -%}
 <!doctype html>
 <html lang="fr">
 <head>
@@ -15,24 +16,31 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
+  {# Logo EPF : en texte tant que le fichier du logo n'est pas fourni. #}
+  {% set logo %}<span class="logo-epf">epf<small>Engineering school</small></span>{% endset %}
+  {% if self.banner() %}<div class="bandeau"><h1>{% block banner %}{% endblock %}</h1>{{ logo }}</div>{% endif %}
   <header>
-    <a class="site" href="{{ url_for('projects.home') }}">BluePrintLab</a>
-    <a href="{{ url_for('projects.project_list') }}">Projets</a>
-    <a href="{{ url_for('projects.information') }}">Informations</a>
-    <a href="{{ url_for('projects.my_space') }}">Mon espace</a>
+    {% if not self.banner() %}<a class="logo-lien" href="{{ url_for('projects.home') }}">{{ logo }}</a>{% endif %}
+    <nav>
+      {% for endpoint, text in [("projects.home", "Accueil"), ("projects.project_list", "Projets"),
+                                ("projects.information", "Informations"), ("projects.my_space", "Mon espace")] %}
+      <a {% if request.endpoint == endpoint %}class="actif" {% endif %}href="{{ url_for(endpoint) }}">{{ text }}</a>
+      {% endfor %}
+    </nav>
     {% if current_user.is_authenticated %}
       <form method="post" action="{{ url_for('accounts.logout') }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button>Se déconnecter</button>
+        <button class="profil" aria-label="Se déconnecter" title="Se déconnecter">{{ icon("profil") }}</button>
       </form>
     {% else %}
-      <a href="{{ url_for('accounts.login') }}">Se connecter</a>
+      <a class="profil" href="{{ url_for('accounts.login') }}" aria-label="Se connecter" title="Se connecter">{{ icon("profil") }}</a>
     {% endif %}
   </header>
   <main>
     {% for confirmation in get_flashed_messages() %}<p class="confirmation">{{ confirmation }}</p>{% endfor %}
     {% block content %}{% endblock %}
   </main>
+  <footer>BluePrintLab · Projets étudiants de l'EPF Montpellier · <a href="{{ url_for('projects.information') }}">Informations</a></footer>
   {% block scripts %}{% endblock %}
 </body>
 </html>

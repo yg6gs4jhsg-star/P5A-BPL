@@ -1,0 +1,36 @@
+{# Mise en page commune des deux pages publiques d'un projet (maquette 04) : en-tête, onglets, colonne de droite. #}
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% block description %}{{ description }}{% endblock %}
+{% block og_type %}article{% endblock %}
+{% block og_image %}{% if og_image %}<meta property="og:image" content="{{ og_image }}">{% endif %}{% endblock %}
+{% block content %}
+<div class="projet-entete">
+  <div>
+    {% include "_themes_pills.html" %}
+    <h1>{{ project.title }}</h1>
+    <p class="equipe">
+      {% for member in project.members %}<span class="initiales" aria-hidden="true">{{ member.account.name|initials }}</span>{% endfor %}
+      {% for member in project.members %}{{ member.account.name }} · {{ member.role|label }}{{ ", " if not loop.last }}{% endfor %}
+      — Encadrant : {{ project.supervisor.name if project.supervisor else "pas encore attribué" }}
+    </p>
+  </div>
+  <div class="partage">
+    <button type="button" class="rond" data-copy="{{ address }}">{{ icon("copier") }} Copier le lien</button>
+    <a class="rond" href="{{ linkedin }}" target="_blank" rel="noopener"><strong>in</strong> Partager sur LinkedIn</a>
+  </div>
+</div>
+<nav class="onglets">
+  {% for endpoint, text in [("projects.project_page", "Résumé"), ("projects.project_detail", "Page détaillée")] %}
+  <a {% if request.endpoint == endpoint %}class="actif" {% endif %}href="{{ url_for(endpoint, slug=project.slug) }}">{{ text }}</a>
+  {% endfor %}
+</nav>
+<div class="deux-colonnes projet">
+  <div>{% block main %}{% endblock %}</div>
+  <aside>
+    {% if client.name or client.logo %}<section class="bloc"><h2 class="petit-titre">Client</h2>{% include "_client.html" %}</section>{% endif %}
+    {% if project.themes %}<section class="bloc"><h2 class="petit-titre">Thèmes</h2>{% include "_themes_pills.html" %}</section>{% endif %}
+  </aside>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='share.js') }}" defer></script>{% endblock %}

@@ -87,9 +87,9 @@ def test_list_filter_by_theme(client, people):
     make(people, "Robot", theme=robotics)
     make(people, "Serre")
     text = client.get(f"/projets?theme={robotics.id}").text
-    assert "Robot" in text and "Serre" not in text and f'value="{robotics.id}" selected' in text
+    assert "Robot" in text and "Serre" not in text and f'class="actif" href="/projets?theme={robotics.id}"' in text
     text = client.get("/projets").text
-    assert "Robot" in text and "Serre" in text and "Tous les thèmes" in text
+    assert "Robot" in text and "Serre" in text and 'class="actif" href="/projets">Tous les projets' in text
 
 
 # Page publique d'un projet.
@@ -105,7 +105,8 @@ def test_public_page_shows_published_version_during_reedition(client, people):
         text = client.get("/projets/drone").text
         assert "Version publiée" in text and "Brouillon secret" not in text
         assert "Eric" in text and "Olga · Owner" in text and "Colin · Collaborateur" in text
-        assert "Voir la page détaillée" in text and "Détail de Drone" not in text  # le détail est sur l'autre page
+        assert 'href="/projets/drone/detail">Page détaillée' in text
+        assert "Détail de Drone" not in text  # le détail est sur l'autre page
         assert "@epf" not in text
         detail = client.get("/projets/drone/detail").text
         assert "Détail de Drone" in detail and "Détail secret" not in detail
@@ -133,8 +134,9 @@ def test_detail_lists_published_files_with_video_player(client, people):
     change_status(people["owner"], project, "submit")
     change_status(people["encadrant"], project, "publish")
     text = client.get("/projets/drone/detail").text
-    assert f'<video controls src="/fichiers/{video.uuid}">' in text and ">rapport.pdf</a>" in text
-    assert ">photo.png</a>" not in text and f'src="/fichiers/{photo.uuid}"' in text  # l'image est dans le texte
+    assert f'<video controls src="/fichiers/{video.uuid}">' in text and "rapport.pdf" in text
+    assert f'class="document" href="/fichiers/{doc.uuid}"' in text
+    assert f'class="document" href="/fichiers/{photo.uuid}"' not in text and f'src="/fichiers/{photo.uuid}"' in text
     for stored in (video, doc, photo):
         response = client.get(f"/fichiers/{stored.uuid}")
         assert response.status_code == 200  # fichier de la version publiée, cité ou non

@@ -1,17 +1,46 @@
 {% extends "base.html" %}
 {% block title %}Informations · BluePrintLab{% endblock %}
 {% block description %}Ce qu'est BluePrintLab, la plateforme des projets étudiants de l'EPF Montpellier, et à qui elle s'adresse.{% endblock %}
+{% block banner %}Informations{% endblock %}
 {% block content %}
-<h1>Informations</h1>
-<p>Chaque année, environ 300 étudiants de l'EPF Montpellier travaillent sur près de 80 projets.
-  Jusqu'ici, ces projets étaient présentés par des ePortfolios ou des rapports, difficiles à lire
-  pour quelqu'un qui ne connaît pas le projet.
-  BluePrintLab les présente de façon simple, moderne et accessible, et permet aux étudiants de les rédiger en équipe.</p>
-<h2>Pour qui ?</h2>
-<ul>
-  <li><strong>Le public</strong> (parents, entreprises, futurs étudiants, partenaires) consulte les projets publiés, sans compte.</li>
-  <li><strong>Les étudiants</strong> créent et rédigent les pages de leurs projets en équipe.</li>
-  <li><strong>Les encadrants</strong> relisent, valident et publient les projets dont ils ont la charge.</li>
-  <li><strong>Le client</strong> suit les projets auxquels il est invité et laisse des commentaires.</li>
-</ul>
+<div class="deux-colonnes">
+  <div>
+    <section class="bloc">
+      <h2>Qu'est-ce que BluePrintLab ?</h2>
+      <p>Chaque année, environ 300 étudiants de l'EPF Montpellier travaillent sur près de 80 projets.
+        Jusqu'ici, ces projets étaient présentés par des ePortfolios ou des rapports, difficiles à lire
+        pour quelqu'un qui ne connaît pas le projet.
+        BluePrintLab les présente de façon simple, moderne et accessible, et permet aux étudiants de les rédiger en équipe.</p>
+      <h3>Pour qui ?</h3>
+      <ul>
+        <li><strong>Le public</strong> (parents, entreprises, futurs étudiants, partenaires) consulte les projets publiés, sans compte.</li>
+        <li><strong>Les étudiants</strong> créent et rédigent les pages de leurs projets en équipe.</li>
+        <li><strong>Les encadrants</strong> relisent, valident et publient les projets dont ils ont la charge.</li>
+        <li><strong>Le client</strong> suit les projets auxquels il est invité et laisse des commentaires.</li>
+      </ul>
+    </section>
+    <section class="bloc">
+      <h2>Présenter un projet en 4 étapes</h2>
+      <ol class="etapes">
+        <li>Se connecter avec son compte Microsoft de l'EPF.</li>
+        <li>Créer le projet et inviter son équipe.</li>
+        <li>Rédiger les textes, ajouter photos et fichiers, puis soumettre à la relecture.</li>
+        <li>L'encadrant relit et publie : le projet devient visible par tout le monde.</li>
+      </ol>
+    </section>
+  </div>
+  <div>
+    <section class="bloc">
+      <h2>Qui peut faire quoi</h2>
+      <ul>
+        <li><strong>Visiteur</strong> : consulter les projets publiés.</li>
+        <li><strong>Étudiant</strong> : créer un projet et le rédiger avec son équipe.</li>
+        <li><strong>Encadrant</strong> : relire, valider, publier et mettre en avant.</li>
+        <li><strong>Client</strong> : lire le projet et le commenter.</li>
+        <li><strong>Admin</strong> : régler la plateforme (réglages, thèmes, encadrants).</li>
+      </ul>
+    </section>
+    {% if contact %}<section class="bloc"><h2>Contact</h2><p>{{ contact }}</p></section>{% endif %}
+  </div>
+</div>
 {% endblock %}

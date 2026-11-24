@@ -1,14 +1,11 @@
 {% extends "base.html" %}
 {% from "action.html" import action_form %}
 {% block title %}{{ project.title }} · BluePrintLab{% endblock %}
-{% block description %}{{ description }}{% endblock %}
-{% block og_type %}article{% endblock %}
-{% block og_image %}{% if og_image %}<meta property="og:image" content="{{ og_image }}">{% endif %}{% endblock %}
-{% block robots %}{% if readable %}<meta name="robots" content="noindex">{% endif %}{% endblock %}
+{% block robots %}<meta name="robots" content="noindex">{% endblock %}
 {% block content %}
 {% if project.deleted_at %}<p class="alerte">Ce projet est à la corbeille.</p>{% endif %}
 <h1>{{ project.title }}</h1>
-{% if readable %}<p>Statut : {{ project.status|label }}</p>{% endif %}
+<p>Statut : {{ project.status|label }}</p>
 <p>Encadrant : {{ project.supervisor.name if project.supervisor else "pas encore attribué" }}</p>
 {% if project.themes %}<p>Thèmes : {{ project.themes|map(attribute="name")|join(", ") }}</p>{% endif %}
 {% include "_client.html" %}
@@ -20,11 +17,6 @@
 <h2>{{ title }}</h2>
 {{ texts[section] }}
 {% endfor %}
-{% if not readable %}
-<p><a href="{{ url_for('projects.project_detail', slug=project.slug) }}">Voir la page détaillée</a></p>
-<p><a href="{{ linkedin }}" target="_blank" rel="noopener">Partager sur LinkedIn</a>
-  <button type="button" data-copy="{{ address }}">Copier le lien</button></p>
-{% endif %}
 
 <h2>Équipe</h2>
 <ul>
@@ -54,7 +46,7 @@
 {% endcall %}
 {% endif %}
 
-{% if readable and true in allowed.values() %}
+{% if true in allowed.values() %}
 <h2>Actions</h2>
 {% if allowed.submit %}{{ action_form(project, "submit", "Soumettre à la relecture") }}{% endif %}
 {% if allowed.request_changes %}
@@ -90,7 +82,6 @@
 {% if allowed.restore %}{{ action_form(project, "restore", "Restaurer") }}{% endif %}
 {% endif %}
 
-{% if readable %}
 <h2>Historique</h2>
 <table>
   <tr><th>Date (heure de Paris)</th><th>Auteur</th><th>Statut</th><th>Message</th></tr>
@@ -103,6 +94,4 @@
   </tr>
   {% endfor %}
 </table>
-{% endif %}
 {% endblock %}
-{% block scripts %}{% if not readable %}<script src="{{ url_for('static', filename='share.js') }}" defer></script>{% endif %}{% endblock %}
