@@ -4,50 +4,17 @@
 {% block robots %}<meta name="robots" content="noindex">{% endblock %}
 {% block content %}
 {% if project.deleted_at %}<p class="alerte">Ce projet est à la corbeille.</p>{% endif %}
+{% include "_themes_pills.html" %}
 <h1>{{ project.title }}</h1>
-<p>Statut : {{ project.status|label }}</p>
-<p>Encadrant : {{ project.supervisor.name if project.supervisor else "pas encore attribué" }}</p>
-{% if project.themes %}<p>Thèmes : {{ project.themes|map(attribute="name")|join(", ") }}</p>{% endif %}
+<p class="doux">Statut : {{ project.status|label }} · Encadrant : {{ project.supervisor.name if project.supervisor else "pas encore attribué" }}</p>
 {% include "_client.html" %}
 
+<p class="bandeau-statut statut-{{ project.status }}">{{ hint }}</p>
 {% if error %}<p class="alerte">{{ error }}</p>{% endif %}
-{% if can_edit %}<p><a href="{{ url_for('projects.edit_draft', slug=project.slug) }}">Modifier le brouillon</a></p>{% endif %}
 
-{% for section, title in sections.items() if texts[section] %}
-<h2>{{ title }}</h2>
-{{ texts[section] }}
-{% endfor %}
-
-<h2>Équipe</h2>
-<ul>
-  {% for member in project.members %}
-  <li>{{ member.account.name }} · {{ member.role|label }}
-    {% if allowed.remove_member and member.role != "owner" %}
-      {% call action_form(project, "remove_member", "Retirer") %}<input type="hidden" name="account_id" value="{{ member.account_id }}">{% endcall %}
-    {% endif %}
-  </li>
-  {% endfor %}
-</ul>
-
-{% if allowed.invite %}
-{% if project.invitations %}
-<h2>Invitations en attente</h2>
-<ul>
-  {% for invitation in project.invitations %}
-  <li>{{ invitation.email }} · {{ invitation.role|label }} · expire le {{ invitation.expires_at|paris("%d/%m/%Y") }}
-    {% call action_form(project, "cancel_invitation", "Annuler l'invitation") %}<input type="hidden" name="invitation_id" value="{{ invitation.id }}">{% endcall %}
-  </li>
-  {% endfor %}
-</ul>
-{% endif %}
-{% call action_form(project, "invite", "Inviter") %}
-  <label>Adresse <input type="email" name="email" required></label>
-  <label>Rôle <select name="role"><option value="collabo">Collaborateur</option><option value="client">Client</option></select></label>
-{% endcall %}
-{% endif %}
-
-{% if true in allowed.values() %}
-<h2>Actions</h2>
+{% if can_edit or true in allowed.values() %}
+<div class="barre-actions">
+{% if can_edit %}<a class="bouton" href="{{ url_for('projects.edit_draft', slug=project.slug) }}">Modifier le brouillon</a>{% endif %}
 {% if allowed.submit %}{{ action_form(project, "submit", "Soumettre à la relecture") }}{% endif %}
 {% if allowed.request_changes %}
   {% call action_form(project, "request_changes", "Demander des modifications") %}
@@ -59,6 +26,8 @@
 {% if allowed.request_reedition %}{{ action_form(project, "request_reedition", "Demander une réédition") }}{% endif %}
 {% if allowed.accept_reedition %}{{ action_form(project, "accept_reedition", "Accepter la réédition") }}{% endif %}
 {% if allowed.refuse_reedition %}{{ action_form(project, "refuse_reedition", "Refuser la réédition") }}{% endif %}
+{% if allowed.feature %}{{ action_form(project, "feature", "Mettre en avant") }}{% endif %}
+{% if allowed.unfeature %}{{ action_form(project, "unfeature", "Retirer des phares") }}{% endif %}
 {% if allowed.assign_supervisor %}
   {% call action_form(project, "assign_supervisor", "Attribuer l'encadrant") %}
     <select name="account_id">{% for supervisor in supervisors %}<option value="{{ supervisor.id }}"{% if supervisor == project.supervisor %} selected{% endif %}>{{ supervisor.name }}</option>{% endfor %}</select>
@@ -77,21 +46,63 @@
     <label><input type="checkbox" name="confirm" required> Je confirme la suppression (corbeille de 30 jours)</label>
   {% endcall %}
 {% endif %}
-{% if allowed.feature %}{{ action_form(project, "feature", "Mettre en avant") }}{% endif %}
-{% if allowed.unfeature %}{{ action_form(project, "unfeature", "Retirer des phares") }}{% endif %}
 {% if allowed.restore %}{{ action_form(project, "restore", "Restaurer") }}{% endif %}
+</div>
 {% endif %}
 
-<h2>Historique</h2>
-<table>
-  <tr><th>Date (heure de Paris)</th><th>Auteur</th><th>Statut</th><th>Message</th></tr>
-  {% for event in project.history %}
-  <tr>
-    <td>{{ event.created_at|paris }}</td>
-    <td>{{ event.author.name if event.author else "ancien membre" }}</td>
-    <td>{% if event.old_status %}{{ event.old_status|label }} → {% endif %}{{ event.new_status|label }}</td>
-    <td>{{ event.message or "" }}</td>
-  </tr>
+{% if texts.values()|select|list %}
+<section class="bloc texte">
+  {% for section, title in sections.items() if texts[section] %}
+  <h2>{{ title }}</h2>
+  {{ texts[section] }}
   {% endfor %}
-</table>
+</section>
+{% endif %}
+
+<section class="bloc">
+  <h2>Équipe</h2>
+  {% for member in project.members %}
+  <div class="ligne">
+    <span><span class="initiales">{{ member.account.name|initials }}</span> {{ member.account.name }} · {{ member.role|label }}</span>
+    {% if allowed.remove_member and member.role != "owner" %}
+      {% call action_form(project, "remove_member", "Retirer") %}<input type="hidden" name="account_id" value="{{ member.account_id }}">{% endcall %}
+    {% endif %}
+  </div>
+  {% endfor %}
+  {% if allowed.invite %}
+  {% call action_form(project, "invite", "Inviter") %}
+    <label>Adresse <input type="email" name="email" required></label>
+    <label>Rôle <select name="role"><option value="collabo">Collaborateur</option><option value="client">Client</option></select></label>
+  {% endcall %}
+  {% endif %}
+</section>
+
+{% if allowed.invite and project.invitations %}
+<section class="bloc">
+  <h2>Invitations en attente</h2>
+  {% for invitation in project.invitations %}
+  <div class="ligne">
+    <span>{{ invitation.email }} · {{ invitation.role|label }} · expire le {{ invitation.expires_at|paris("%d/%m/%Y") }}</span>
+    {% call action_form(project, "cancel_invitation", "Annuler l'invitation") %}<input type="hidden" name="invitation_id" value="{{ invitation.id }}">{% endcall %}
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
+
+<section class="bloc">
+  <h2>Historique</h2>
+  <div class="defilement">
+  <table>
+    <tr><th>Date (heure de Paris)</th><th>Auteur</th><th>Statut</th><th>Message</th></tr>
+    {% for event in project.history %}
+    <tr>
+      <td>{{ event.created_at|paris }}</td>
+      <td>{{ event.author.name if event.author else "ancien membre" }}</td>
+      <td>{% if event.old_status %}{{ event.old_status|label }} → {% endif %}{{ event.new_status|label }}</td>
+      <td>{{ event.message or "" }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  </div>
+</section>
 {% endblock %}

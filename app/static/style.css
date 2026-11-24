@@ -14,6 +14,16 @@
   --rayon: 0.75rem;
   --ombre: 0 1px 3px rgba(0, 0, 0, 0.06);
   --degrade: linear-gradient(110deg, var(--violet), var(--rouge) 55%, var(--rose));
+  /* Statuts (pastille pâle : fond, texte) et rôles dans un projet */
+  --brouillon-fond: #FDEBD6; --brouillon-texte: #9A5A00;
+  --relecture-fond: #E2E8FB; --relecture-texte: #2848A8;
+  --publie-fond: #DDF3E4; --publie-texte: #1F7A3E;
+  --reedition-fond: #F1E4FB; --reedition-texte: #6A2C9A;
+  --retire-fond: #E9E9EE; --retire-texte: #4E4E5A;
+  --owner-fond: #E2ECFB; --owner-texte: #1F4F99;
+  --collabo-fond: #DDF3E4; --collabo-texte: #1F7A3E;
+  --client-fond: #FDE4F1; --client-texte: #A3195F;
+  --encadrant-fond: #FFE8DA; --encadrant-texte: #A8420B;
 }
 
 /* Page */
@@ -91,6 +101,7 @@ footer { padding: 2rem 1rem; text-align: center; color: var(--texte-doux); font-
 .partage { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: flex-start; }
 .onglets { display: flex; gap: 2rem; margin: 1rem 0 1.5rem; border-bottom: 1px solid var(--bordure); }
 .deux-colonnes { display: grid; grid-template-columns: 2fr 1fr; gap: 1.5rem; align-items: start; }
+.deux-colonnes > * { min-width: 0; }  /* une zone de texte large ne pousse pas la page hors de l'écran */
 .document { display: flex; align-items: center; gap: 0.6rem; margin: 0.5rem 0; padding: 0.6rem 0.8rem;
   border: 1px solid var(--bordure); border-radius: 0.5rem; color: var(--noir); text-decoration: none; }
 .document .icone:last-child { margin-left: auto; }
@@ -101,7 +112,49 @@ footer { padding: 2rem 1rem; text-align: center; color: var(--texte-doux); font-
 .etapes li:last-child::before { background: var(--rouge); }
 @media (max-width: 52rem) { .accueil, .deux-colonnes { grid-template-columns: 1fr; } }
 
-/* Pages connectées (mise en page à l'étape 8e) */
+/* Pages connectées : pastilles pâles, boutons, barres, blocs */
+.pastille-pale, .bandeau-statut { padding: 0.15rem 0.7rem; border-radius: 1rem; font-size: 0.8rem; font-weight: 700; }
+.statut-brouillon { background: var(--brouillon-fond); color: var(--brouillon-texte); }
+.statut-en_relecture { background: var(--relecture-fond); color: var(--relecture-texte); }
+.statut-publie { background: var(--publie-fond); color: var(--publie-texte); }
+.statut-reedition_demandee { background: var(--reedition-fond); color: var(--reedition-texte); }
+.statut-retire { background: var(--retire-fond); color: var(--retire-texte); }
+.role-owner { background: var(--owner-fond); color: var(--owner-texte); }
+.role-collabo { background: var(--collabo-fond); color: var(--collabo-texte); }
+.role-client { background: var(--client-fond); color: var(--client-texte); }
+.role-encadrant { background: var(--encadrant-fond); color: var(--encadrant-texte); }
+.bandeau-statut { display: block; padding: 0.9rem 1.2rem; border-radius: var(--rayon); font-size: 0.95rem; }
+.doux { color: var(--texte-doux); }
+main button, .bouton { min-height: 2.75rem; padding: 0.5rem 1.1rem; border: 1px solid var(--violet); border-radius: 0.5rem;
+  background: var(--violet); color: #fff; font-weight: 600; text-decoration: none; display: inline-flex; align-items: center; }
+.bouton.secondaire, .outils button, .ligne button, .fichier button { background: #fff; color: var(--noir); border-color: var(--bordure); }
+.bouton.petit, .outils button { min-height: 2.25rem; padding: 0.25rem 0.7rem; font-size: 0.85rem; }
+.barre, .barre-actions, .profil-entete, .pastilles-ligne, .ligne, .fichier { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; }
+.barre { margin-bottom: 1.25rem; }
+.barre-boutons, .profil-entete .bouton { margin-left: auto; display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.barre-actions { margin: 1rem 0 1.25rem; padding: 1rem; background: #fff; border: 1px solid var(--bordure); border-radius: var(--rayon); }
+.barre form, .barre-actions form, .ligne form, .fichier form { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.profil-entete { margin-bottom: 1.5rem; }
+.profil-entete h1 { margin: 0; }
+.profil-entete p { margin: 0.2rem 0 0; }
+.initiales.grand { width: 4.5rem; height: 4.5rem; font-size: 1.4rem; margin: 0; }
+.pastilles-ligne { justify-content: space-between; }
+.carte-espace { margin: 0; }
+.carte-espace h3 { margin: 0.6rem 0 0.2rem; font-size: 1.05rem; }
+.carte-espace h3 a { color: var(--noir); text-decoration: none; }
+.liste-a-faire .ligne, .fichier { justify-content: space-between; padding: 0.6rem 0; border-bottom: 1px solid var(--bordure); }
+.liste-a-faire .ligne:last-child { border-bottom: 0; }
+.fichier code { flex-basis: 100%; overflow-wrap: anywhere; font-size: 0.75rem; color: var(--texte-doux); }
+.zone-envoi { display: flex; flex-wrap: wrap; gap: 0.5rem; padding: 1rem; border: 2px dashed var(--bordure); border-radius: var(--rayon); }
+.titre-projet { font-size: 1.3rem; font-weight: 700; margin: 0 0 1rem; }
+.message { max-width: 32rem; margin: 3rem auto; text-align: center; }
+.defilement { overflow-x: auto; }
+main input:not([type=checkbox]), main select { min-height: 2.5rem; box-sizing: border-box; padding: 0.3rem 0.6rem;
+  border: 1px solid var(--bordure); border-radius: 0.5rem; background: #fff; }
+.recherche input { min-height: auto; border-radius: 2rem; }
+.rond { min-height: 2.5rem; display: inline-flex; align-items: center; gap: 0.35rem; }
+
+/* Pages connectées : reprises des étapes précédentes */
 .alerte { border-left: 4px solid var(--rouge); padding: 0.5rem 1rem; background: #fdecea; }
 .confirmation { border-left: 4px solid var(--lilas); padding: 0.5rem 1rem; background: #f1ebfc; }
 table { width: 100%; border-collapse: collapse; }
@@ -114,4 +167,4 @@ textarea { width: 100%; box-sizing: border-box; font: inherit; }
 .cote-a-cote { display: grid; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); gap: 0.5rem; }
 .outils { display: flex; flex-wrap: wrap; gap: 0.25rem; margin-bottom: 0.25rem; }
 .themes { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; }
-.badge { display: inline-block; margin: 0 0.5rem 0 0; padding: 0.1rem 0.6rem; border-radius: 1rem; background: var(--rouge); color: #fff; font-weight: 700; }
+.badge { display: inline-block; margin: 0 0.25rem; padding: 0.1rem 0.6rem; border-radius: 1rem; background: var(--rouge); color: #fff; font-weight: 700; }

@@ -59,7 +59,7 @@ def test_callback_logs_in_and_shows_my_space(client, monkeypatch):
     monkeypatch.setattr(oauth.microsoft, "authorize_access_token",
                         lambda: {"userinfo": claims(email="prof@epf.fr", name="Prof")})
     assert client.get("/auth/callback").location == "/mon-espace"
-    assert "Prof · Encadrant · admin" in client.get("/mon-espace").text
+    assert "<h1>Prof</h1>" in (text := client.get("/mon-espace").text) and "· Encadrant · admin" in text
 
 
 def test_callback_refused_account_gets_message(client, monkeypatch):

@@ -1,4 +1,6 @@
 """Étape 8d : ce qui, dans la mise en page des pages publiques, dépend de la logique."""
+import re
+
 import pytest
 
 from app.models import Theme, db
@@ -59,3 +61,76 @@ def test_connected_pages_still_respond(client, people):
     log_in(client, people["owner"])
     for url in ("/mon-espace", "/projets/drone", "/projets/drone/editer"):
         assert client.get(url).status_code == 200
+
+
+# Étape 8e : pages connectées.
+def test_one_pale_pill_color_per_status():
+    from pathlib import Path
+    from app.models import STATUSES
+    css = (Path(pages.__file__).parents[1] / "static" / "style.css").read_text()
+    backgrounds = {re.search(rf"\.statut-{status} {{ background: (var\(--[a-z-]+\))", css).group(1) for status in STATUSES}
+    assert len(backgrounds) == len(STATUSES)  # une couleur différente par statut
+    assert set(pages.STATUS_HINTS) == set(STATUSES)  # une phrase de bandeau par statut
+
+
+def sections(text):
+    """Titres des sections de Mon espace et titres des projets qu'elles contiennent."""
+    found = {}
+    for part in text.split("<h2>")[1:]:
+        title = part.split("<", 1)[0].strip()
+        found[title] = re.findall(r'<(?:strong|h3><a [^>]*)>([^<]+)<', part.split("<h2>")[0])
+    return found
+
+
+@pytest.fixture
+def space(people):
+    from app.projects.service import create_project, invite
+    from tests.conftest import person
+    people["client"] = person("Clara", "encadrant")
+    draft = create_project(people["owner"], "Brouillon", people["encadrant"])
+    invite(people["owner"], draft, "colin@epfedu.fr", "collabo")
+    invite(people["owner"], draft, "clara@epf.fr", "client")
+    reviewed = create_project(people["owner"], "Relecture", people["encadrant"])
+    change_status(people["owner"], reviewed, "submit")
+    make(people, "Publié")
+    withdrawn = make(people, "Retiré")
+    change_status(people["encadrant"], withdrawn, "unpublish")
+    return people
+
+
+@pytest.mark.parametrize("who, expected", [
+    ("owner", {"À faire": ["Brouillon"], "Mes projets en cours": ["Brouillon", "Relecture"],
+               "Mes projets validés": ["Publié", "Retiré"]}),
+    ("collabo", {"À faire": ["Brouillon"], "Mes projets en cours": ["Brouillon"]}),
+    ("client", {"Mes projets en cours": ["Brouillon"]}),
+    ("encadrant", {"À relire": ["Relecture"], "Mes projets en cours": ["Brouillon", "Relecture"],
+                   "Mes projets validés": ["Publié", "Retiré"]}),
+])
+def test_my_space_sections(client, space, who, expected):
+    log_in(client, space[who])
+    found = {title: sorted(set(names)) for title, names in sections(client.get("/mon-espace").text).items()
+             if title != "Créer un projet"}
+    assert found == {title: sorted(names) for title, names in expected.items()}
+
+
+@pytest.mark.parametrize("who, shown", [("owner", True), ("collabo", False)])
+def test_editor_submit_button_follows_rights(client, people, who, shown):
+    from app.projects.service import create_project, invite
+    project = create_project(people["owner"], "Drone", people["encadrant"])
+    invite(people["owner"], project, "colin@epfedu.fr", "collabo")
+    log_in(client, people[who])
+    text = client.get("/projets/drone/editer").text
+    assert ("<button>Soumettre à la relecture</button>" in text) is shown and 'form="editeur">Enregistrer' in text
+
+
+def test_status_banner_on_management_page(client, people):
+    project = make(people, "Drone", published=False)
+    change_status(people["owner"], project, "submit")
+    log_in(client, people["owner"])
+    assert '<p class="bandeau-statut statut-en_relecture">En relecture : en attente de l&#39;encadrant.</p>' in \
+        client.get("/projets/drone").text
+
+
+def test_error_page_in_a_block(client):
+    text = client.get("/projets/inconnu").text
+    assert '<section class="bloc message">' in text and "Page introuvable." in text and "Retour à l'accueil" in text

@@ -1,3 +1,3 @@
 {% if client.name or client.logo %}
-<p>Client : {% if client.logo %}<img class="logo" src="/fichiers/{{ client.logo }}" alt="Logo">{% endif %} {{ client.name }}</p>
+<p>{% if not no_label %}Client : {% endif %}{% if client.logo %}<img class="logo" src="/fichiers/{{ client.logo }}" alt="Logo">{% endif %} {{ client.name }}</p>
 {% endif %}

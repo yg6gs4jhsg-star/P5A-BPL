@@ -28,7 +28,7 @@
 <div class="deux-colonnes projet">
   <div>{% block main %}{% endblock %}</div>
   <aside>
-    {% if client.name or client.logo %}<section class="bloc"><h2 class="petit-titre">Client</h2>{% include "_client.html" %}</section>{% endif %}
+    {% if client.name or client.logo %}<section class="bloc"><h2 class="petit-titre">Client</h2>{% with no_label=True %}{% include "_client.html" %}{% endwith %}</section>{% endif %}
     {% if project.themes %}<section class="bloc"><h2 class="petit-titre">Thèmes</h2>{% include "_themes_pills.html" %}</section>{% endif %}
   </aside>
 </div>

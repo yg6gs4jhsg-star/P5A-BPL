@@ -1,0 +1,13 @@
+{# Carte d'un de mes projets dans Mon espace : statut, mon rôle, titre, encadrant, équipe. #}
+<article class="bloc carte-espace">
+  <div class="pastilles-ligne">
+    <span class="pastille-pale statut-{{ project.status }}">{{ project.status|label }}</span>
+    <span class="pastille-pale role-{{ role }}">{{ role|label }}</span>
+  </div>
+  <h3><a href="{{ url_for('projects.project_page', slug=project.slug) }}">{{ project.title }}</a></h3>
+  <p class="doux">Encadrant : {{ project.supervisor.name if project.supervisor else "pas encore attribué" }}</p>
+  <div class="pastilles-ligne">
+    <span>{% for member in project.members %}<span class="initiales" title="{{ member.account.name }}">{{ member.account.name|initials }}</span>{% endfor %}</span>
+    <a class="plus" href="{{ url_for('projects.project_page', slug=project.slug) }}">Voir le projet →</a>
+  </div>
+</article>

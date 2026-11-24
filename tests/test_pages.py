@@ -89,19 +89,20 @@ def test_my_space_lists_projects_by_role(client, people, project):
     deleted.deleted_at = utcnow()
     db.session.commit()
     text = view(client, people, "owner", "/mon-espace").text
-    assert "Olga · Étudiant" in text
-    assert "<h2>Owner</h2>" in text and "Drone autonome</a> : Brouillon" in text
+    assert "<h1>Olga</h1>" in text and "olga@epfedu.fr · Étudiant" in text
+    assert '<span class="pastille-pale role-owner">Owner</span>' in text and "Drone autonome</a>" in text
+    assert '<span class="pastille-pale statut-brouillon">Brouillon</span>' in text
     assert "Vieux projet" not in text
 
 
 @pytest.mark.parametrize("who, heading", [("collabo", "Collaborateur"), ("client", "Client"), ("encadrant", "Encadrant")])
 def test_my_space_other_roles(client, people, project, who, heading):
     text = view(client, people, who, "/mon-espace").text
-    assert f"<h2>{heading}</h2>" in text and "Drone autonome" in text
+    assert f'<span class="pastille-pale role-{who}">{heading}</span>' in text and "Drone autonome" in text
 
 
 def test_my_space_shows_admin(client, people):
-    assert "Adam · Encadrant · admin" in view(client, people, "admin", "/mon-espace").text
+    assert "adam@epf.fr · Encadrant · admin" in view(client, people, "admin", "/mon-espace").text
 
 
 @pytest.mark.parametrize("who, has_form", [("exterieur", True), ("encadrant", False), ("admin", False)])

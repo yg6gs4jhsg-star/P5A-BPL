@@ -2,36 +2,49 @@
 {% block title %}Mon espace · BluePrintLab{% endblock %}
 {% block robots %}<meta name="robots" content="noindex">{% endblock %}
 {% block content %}
-<h1>Mon espace</h1>
-<p>{{ current_user.name }} · {{ current_user.base_role|label }}{% if admin %} · admin{% endif %}</p>
-{% if to_do %}<p class="badge">À faire : {{ to_do }}</p>{% endif %}
-{% if to_review %}<p class="badge">À relire : {{ to_review }}</p>{% endif %}
+<div class="profil-entete">
+  <span class="initiales grand">{{ current_user.name|initials }}</span>
+  <div>
+    <h1>{{ current_user.name }}</h1>
+    <p class="doux">{{ current_user.email }} · {{ current_user.base_role|label }}{% if admin %} · admin{% endif %}</p>
+  </div>
+  {% if can_create %}<a class="bouton" href="#creer">+ Créer un projet</a>{% endif %}
+</div>
 
-{% for role, projects in projects_by_role.items() if projects %}
-<h2>{{ role|label }}</h2>
-<ul>
-  {% for project in projects %}
-  <li><a href="{{ url_for('projects.project_page', slug=project.slug) }}">{{ project.title }}</a> : {{ project.status|label }}</li>
+{% for title, items, button, endpoint in [("À faire", to_do, "Continuer l'édition", "projects.edit_draft"),
+                                          ("À relire", to_review, "Relire", "projects.project_page")] if items %}
+<h2>{{ title }} <span class="badge">{{ items|length }}</span></h2>
+<div class="bloc liste-a-faire">
+  {% for project, role in items %}
+  <div class="ligne"><strong>{{ project.title }}</strong>
+    <a class="bouton secondaire" href="{{ url_for(endpoint, slug=project.slug) }}">{{ button }}</a></div>
   {% endfor %}
-</ul>
+</div>
+{% endfor %}
+
+{% for title, items in [("Mes projets en cours", ongoing), ("Mes projets validés", validated)] if items %}
+<h2>{{ title }}</h2>
+<div class="cartes">{% for project, role in items %}{% include "_space_card.html" %}{% endfor %}</div>
 {% else %}
 <p>Aucun projet pour l'instant.</p>
 {% endfor %}
 
 {% if can_create %}
-<h2>Créer un projet</h2>
-{% if error %}<p class="alerte">{{ error }}</p>{% endif %}
-<form method="post">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-  <p><label>Titre<br><input name="title" value="{{ title }}" maxlength="200" required></label></p>
-  <p><label>Encadrant (facultatif)<br>
-    <select name="supervisor_id">
-      <option value="">Pas encore choisi</option>
-      {% for supervisor in supervisors %}<option value="{{ supervisor.id }}">{{ supervisor.name }}</option>{% endfor %}
-    </select></label></p>
-  <p>Thèmes (facultatif)</p>
-  {% include "_themes.html" %}
-  <p><button>Créer le projet</button></p>
-</form>
+<section class="bloc" id="creer">
+  <h2>Créer un projet</h2>
+  {% if error %}<p class="alerte">{{ error }}</p>{% endif %}
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <p><label>Titre<br><input name="title" value="{{ title }}" maxlength="200" required></label></p>
+    <p><label>Encadrant (facultatif)<br>
+      <select name="supervisor_id">
+        <option value="">Pas encore choisi</option>
+        {% for supervisor in supervisors %}<option value="{{ supervisor.id }}">{{ supervisor.name }}</option>{% endfor %}
+      </select></label></p>
+    <p>Thèmes (facultatif)</p>
+    {% include "_themes.html" %}
+    <p><button class="bouton">Créer le projet</button></p>
+  </form>
+</section>
 {% endif %}
 {% endblock %}

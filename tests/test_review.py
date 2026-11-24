@@ -46,9 +46,9 @@ def test_badges_count(client, people, project):
     trashed = create_project(people["owner"], "Corbeille")
     trashed.deleted_at = utcnow()
     db.session.commit()
-    assert "À faire : 1" in page(client, people, "owner", "/mon-espace").text  # Drone ; pas la corbeille
-    assert "À faire : 1" in page(client, people, "collabo", "/mon-espace").text
-    assert "À relire : 2" in page(client, people, "encadrant", "/mon-espace").text  # en relecture + réédition
+    assert 'À faire <span class="badge">1</span>' in page(client, people, "owner", "/mon-espace").text  # pas la corbeille
+    assert 'À faire <span class="badge">1</span>' in page(client, people, "collabo", "/mon-espace").text
+    assert 'À relire <span class="badge">2</span>' in page(client, people, "encadrant", "/mon-espace").text
 
 
 @pytest.mark.parametrize("who", ["client", "autre", "admin"])

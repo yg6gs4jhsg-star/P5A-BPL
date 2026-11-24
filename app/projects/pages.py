@@ -20,7 +20,15 @@ LABELS = {
     "owner": "Owner", "collabo": "Collaborateur", "client": "Client",
     "encadrant": "Encadrant", "etudiant": "Étudiant",
 }
-ROLE_ORDER = ("owner", "collabo", "client", "encadrant")
+ONGOING_STATUSES = ("brouillon", "en_relecture", "reedition_demandee")  # « Mes projets en cours » ; les autres : validés
+# Phrase du bandeau de statut de la page de gestion.
+STATUS_HINTS = {
+    "brouillon": "Brouillon : le projet est en cours de rédaction.",
+    "en_relecture": "En relecture : en attente de l'encadrant.",
+    "publie": "Publié : le projet est visible par tout le monde.",
+    "reedition_demandee": "Réédition demandée : en attente de l'accord de l'encadrant.",
+    "retire": "Retiré du site public : le projet n'est plus visible du public.",
+}
 PARIS = ZoneInfo("Europe/Paris")  # dates enregistrées en UTC, affichées à l'heure de Paris
 LINKEDIN_SHARE = "https://www.linkedin.com/sharing/share-offsite/?url="
 THEME_COLORS = ("#000000", "#7A37E4", "#FF611B", "#F7429F", "#470A68", "#DF231D")  # pastilles de thème (charte)
@@ -156,12 +164,10 @@ def offered_themes(current=()):
 
 
 def my_projects(user):
-    """Mes projets hors corbeille, classés par rôle."""
-    by_role = {role: [] for role in ROLE_ORDER}
-    for member in Member.query.filter_by(account_id=user.id).join(Project).filter(Project.deleted_at.is_(None)):
-        by_role[member.role].append(member.project)
-    by_role["encadrant"] = Project.query.filter_by(supervisor_id=user.id, deleted_at=None).all()
-    return by_role
+    """Mes projets hors corbeille, chacun avec mon rôle (Owner, Collaborateur, Client ou Encadrant)."""
+    members = Member.query.filter_by(account_id=user.id).join(Project).filter(Project.deleted_at.is_(None))
+    supervised = Project.query.filter_by(supervisor_id=user.id, deleted_at=None)
+    return [(member.project, member.role) for member in members] + [(project, "encadrant") for project in supervised]
 
 
 @bp.route("/mon-espace", methods=["GET", "POST"])
@@ -178,14 +184,15 @@ def my_space():
             return redirect(url_for("projects.project_page", slug=project.slug))
         except ProjectError as refusal:
             error, status = str(refusal), 400
-    projects_by_role = my_projects(current_user)
-    team = projects_by_role["owner"] + projects_by_role["collabo"]
+    mine = my_projects(current_user)
     return render_template(
         "my_space.html",
         admin=is_admin(current_user.email),
-        projects_by_role=projects_by_role,
-        to_do=sum(project.status == "brouillon" for project in team),
-        to_review=sum(project.status in REVIEW_STATUSES for project in projects_by_role["encadrant"]),
+        # Badges : « À faire » pour l'équipe (brouillons), « À relire » pour l'encadrant attribué.
+        to_do=[(p, r) for p, r in mine if r in ("owner", "collabo") and p.status == "brouillon"],
+        to_review=[(p, r) for p, r in mine if r == "encadrant" and p.status in REVIEW_STATUSES],
+        ongoing=[(p, r) for p, r in mine if p.status in ONGOING_STATUSES],
+        validated=[(p, r) for p, r in mine if p.status not in ONGOING_STATUSES],
         can_create=can(current_user, "create_project"),
         supervisors=Account.query.filter_by(base_role="encadrant").order_by(Account.name),
         themes=offered_themes(), checked=checked, title=title, error=error,
@@ -218,7 +225,7 @@ def show_project(project, readable, error=None, status=200):
                                text=content.render(content.read_section(project, "published", "resume"), enlarge=True))
     texts = {s: content.render(content.read_section(project, "draft", s)) for s in content.SECTIONS}
     return render_template(
-        "project.html", project=project, error=error, texts=texts,
+        "project.html", project=project, error=error, texts=texts, hint=STATUS_HINTS[project.status],
         client=content.read_client(project, "draft"),
         sections=content.SECTIONS, can_edit=can(current_user, "edit_draft", project),
         allowed=allowed_actions(project),
@@ -322,6 +329,7 @@ def show_editor(project, texts=None, versions=None, client=None, checked=None, p
         versions = {s: content.fingerprint(t) for s, t in texts.items()}
     return render_template(
         "editor.html", project=project, sections=content.SECTIONS, texts=texts, versions=versions,
+        can_submit=can(current_user, "submit", project),
         client=client or content.read_client(project, "draft"),
         images=[file for file in project.files if file.mime_type.startswith("image/")],
         themes=offered_themes(project.themes),

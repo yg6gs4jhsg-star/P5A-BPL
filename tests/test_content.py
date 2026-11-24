@@ -344,7 +344,7 @@ def test_client_from_editor_and_public_logo(client, people, project):
     publish(project, people)
     client.post("/logout")
     page = client.get("/projets/drone").text
-    assert "Client :" in page and "Airbus" in page and f"/fichiers/{logo.uuid}" in page
+    assert '<h2 class="petit-titre">Client</h2>' in page and "Airbus" in page and f"/fichiers/{logo.uuid}" in page
     response = client.get(f"/fichiers/{logo.uuid}")
     assert response.status_code == 200
     response.close()
@@ -514,7 +514,8 @@ def test_themes_from_editor_shown_on_project_page(client, people, project, theme
     data = {"theme_ids": [themes[0].id], "new_theme": "Aéronautique",
             **{f"version_{s}": v for s, v in versions(project).items()}}
     client.post("/projets/drone/editer", data=data)
-    assert "Thèmes : Aéronautique, Robotique" in client.get("/projets/drone").text
+    text = client.get("/projets/drone").text
+    assert text.index(">Aéronautique</span>") < text.index(">Robotique</span>")  # pastilles, dans l'ordre
 
 
 # 6c bis : thèmes à la création du projet (PRJ-01).
