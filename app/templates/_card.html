@@ -1,6 +1,11 @@
-{# Carte d'un projet public : accueil et liste. #}
+{# Carte d'un projet public : accueil et liste. Sans image publiée, un fond de couleur de la charte. #}
 <article class="carte">
-  <h3><a href="{{ url_for('projects.project_page', slug=card.project.slug) }}">{{ card.project.title }}</a></h3>
-  {% with client=card.client %}{% include "_client.html" %}{% endwith %}
-  {% if card.excerpt %}<p>{{ card.excerpt }}</p>{% endif %}
+  <div class="carte-photo">{% if card.image %}<img src="/fichiers/{{ card.image.uuid }}" alt="" loading="lazy">{% endif %}</div>
+  <div class="carte-texte">
+    {% include "_themes_pills.html" %}
+    <h3><a href="{{ url_for('projects.project_page', slug=card.project.slug) }}">{{ card.project.title }}</a></h3>
+    {% if card.excerpt %}<p>{{ card.excerpt }}</p>{% endif %}
+    {% with client=card.client %}{% include "_client.html" %}{% endwith %}
+    <a class="plus" href="{{ url_for('projects.project_page', slug=card.project.slug) }}">En savoir plus →</a>
+  </div>
 </article>

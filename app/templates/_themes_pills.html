@@ -1,0 +1,2 @@
+{% set project = card.project if card is defined else project %}
+{% if project.themes %}<div class="pastilles">{% for theme in project.themes %}<span class="pastille" style="background: {{ theme.name|theme_color }}">{{ theme.name }}</span>{% endfor %}</div>{% endif %}
